@@ -1,4 +1,15 @@
 :80 {
   encode gzip
-  reverse_proxy api:4100
+
+  handle /api* {
+    reverse_proxy api:4100
+  }
+
+  handle /admin* {
+    reverse_proxy admin:4101
+  }
+
+  handle {
+    reverse_proxy storefront:4102
+  }
 }

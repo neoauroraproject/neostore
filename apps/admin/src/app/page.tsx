@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 
-const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4100/api';
+const API = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export default function AdminHome() {
-  const [email, setEmail] = useState('owner@neostore.local');
-  const [password, setPassword] = useState('neostore123');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [token, setToken] = useState('');
   const [workspaces, setWorkspaces] = useState<any[]>([]);
   const [dashboard, setDashboard] = useState<any>(null);

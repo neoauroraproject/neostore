@@ -49,6 +49,42 @@ services:
     expose:
       - "4100"
 
+  storefront:
+    build:
+      context: .
+      dockerfile: apps/storefront/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api
+        NEXT_PUBLIC_STORE_SLUG: ${STORE_SLUG:-store}
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: /api
+      NEXT_PUBLIC_STORE_SLUG: ${STORE_SLUG:-store}
+      PORT: "4102"
+    depends_on:
+      - api
+    networks:
+      - neostore
+    expose:
+      - "4102"
+
+  admin:
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_URL: /api
+      PORT: "4101"
+    depends_on:
+      - api
+    networks:
+      - neostore
+    expose:
+      - "4101"
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -61,6 +97,8 @@ services:
       - caddy_config:/config
     depends_on:
       - api
+      - storefront
+      - admin
     networks:
       - neostore
 

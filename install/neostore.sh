@@ -183,28 +183,31 @@ write_caddyfile() {
   local domain="$1"
   local scheme="$2"
   mkdir -p "$INSTALL_DIR/install"
+  local site_block
   if [[ -n "$domain" && "$scheme" == "https" ]]; then
-    cat >"$INSTALL_DIR/install/Caddyfile" <<EOF
-${domain} {
-  encode gzip
-  reverse_proxy api:4100
-}
-EOF
+    site_block="${domain}"
   elif [[ -n "$domain" ]]; then
-    cat >"$INSTALL_DIR/install/Caddyfile" <<EOF
-http://${domain} {
-  encode gzip
-  reverse_proxy api:4100
-}
-EOF
+    site_block="http://${domain}"
   else
-    cat >"$INSTALL_DIR/install/Caddyfile" <<EOF
-:80 {
+    site_block=":80"
+  fi
+  cat >"$INSTALL_DIR/install/Caddyfile" <<EOF
+${site_block} {
   encode gzip
-  reverse_proxy api:4100
+
+  handle /api* {
+    reverse_proxy api:4100
+  }
+
+  handle /admin* {
+    reverse_proxy admin:4101
+  }
+
+  handle {
+    reverse_proxy storefront:4102
+  }
 }
 EOF
-  fi
 }
 
 do_install() {
@@ -273,14 +276,16 @@ do_install() {
   echo
   echo -e "${GREEN}${BOLD}NeoStore installed successfully${NC}"
   if [[ -n "$domain" ]]; then
-    echo -e "  URL:     ${BOLD}${scheme}://${domain}${NC}"
+    echo -e "  Shop:    ${BOLD}${scheme}://${domain}/${NC}"
+    echo -e "  Admin:   ${BOLD}${scheme}://${domain}/admin${NC}"
     echo -e "  API:     ${BOLD}${scheme}://${domain}/api/docs${NC}"
   else
-    echo -e "  URL:     ${BOLD}http://SERVER_IP/${NC}  (Caddy :80)"
+    echo -e "  Shop:    ${BOLD}http://SERVER_IP/${NC}"
+    echo -e "  Admin:   ${BOLD}http://SERVER_IP/admin${NC}"
     echo -e "  API:     ${BOLD}http://SERVER_IP/api/docs${NC}"
   fi
-  echo -e "  Admin:   ${BOLD}${admin_email}${NC}"
-  echo -e "  Shop:    slug ${BOLD}${store_slug}${NC}"
+  echo -e "  Login:   ${BOLD}${admin_email}${NC}"
+  echo -e "  Slug:    ${BOLD}${store_slug}${NC}  (also ${scheme:-http}://${domain:-SERVER_IP}/${store_slug})"
   echo -e "  Data:    ${BOLD}${INSTALL_DIR}${NC}"
   echo
   echo "Open installer menu again:"
