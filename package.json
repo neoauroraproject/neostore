@@ -1,0 +1,18 @@
+{
+  "name": "neostore",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NeoStore — standalone digital storefront platform",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "echo \"Wire apps after Phase 1 scaffold\"",
+    "build": "echo \"Wire apps after Phase 1 scaffold\"",
+    "lint": "echo \"Wire apps after Phase 1 scaffold\""
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

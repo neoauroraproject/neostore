@@ -1,0 +1,9 @@
+{
+  "name": "@neostore/api",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"API scaffold — Phase 1\"",
+    "build": "echo \"API scaffold — Phase 1\""
+  }
+}

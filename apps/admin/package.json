@@ -1,0 +1,9 @@
+{
+  "name": "@neostore/admin",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Admin scaffold — Phase 1\"",
+    "build": "echo \"Admin scaffold — Phase 1\""
+  }
+}

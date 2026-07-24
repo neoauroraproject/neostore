@@ -1,0 +1,9 @@
+{
+  "name": "@neostore/storefront",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "echo \"Storefront scaffold — Phase 1\"",
+    "build": "echo \"Storefront scaffold — Phase 1\""
+  }
+}
