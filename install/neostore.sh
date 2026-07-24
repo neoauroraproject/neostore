@@ -221,9 +221,24 @@ compose_pull_up() {
   fi
   export NEOSTORE_VERSION="$version"
   export NEOSTORE_PULL_POLICY="${NEOSTORE_PULL_POLICY:-always}"
+
+  # Optional: GHCR_TOKEN / GITHUB_TOKEN with read:packages if images are private
+  if [[ -n "${GHCR_TOKEN:-${GITHUB_TOKEN:-}}" ]]; then
+    log "Logging in to GHCR..."
+    echo "${GHCR_TOKEN:-$GITHUB_TOKEN}" | docker login ghcr.io -u "${GHCR_USER:-neoauroraproject}" --password-stdin >/dev/null
+  fi
+
   log "Pulling pre-built images (tag: ${version}) from GHCR..."
   if ! compose pull; then
-    die "Failed to pull images. GitHub Actions may still be building — check https://github.com/neoauroraproject/neostore/actions"
+    err "Failed to pull images from ghcr.io"
+    echo
+    echo "Images must be public (one-time), or set GHCR_TOKEN:"
+    echo "  https://github.com/users/neoauroraproject/packages/container/neostore-api/settings"
+    echo "  https://github.com/users/neoauroraproject/packages/container/neostore-storefront/settings"
+    echo "  https://github.com/users/neoauroraproject/packages/container/neostore-admin/settings"
+    echo "Set each package visibility to Public, then retry Update."
+    echo "CI status: https://github.com/neoauroraproject/neostore/actions"
+    exit 1
   fi
   log "Starting stack (no local build)..."
   compose up -d --remove-orphans

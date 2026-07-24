@@ -67,11 +67,15 @@ jobs:
 
       - name: Make package public
         continue-on-error: true
-        run: |
-          gh api \
-            --method PUT \
-            -H "Accept: application/vnd.github+json" \
-            "/user/packages/container/${{ matrix.image }}/visibility" \
-            -f visibility=public || true
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Best-effort: package may already be public or API may lack scope
+          for pkg in ${{ matrix.image }}; do
+            gh api --method PUT \
+              -H "Accept: application/vnd.github+json" \
+              "/user/packages/container/${pkg}/visibility" \
+              -f visibility=public \
+              && echo "Set ${pkg} public" \
+              || echo "Could not auto-publish ${pkg} — set Public in package settings UI"
+          done

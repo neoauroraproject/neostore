@@ -10,6 +10,12 @@ bash <(curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neostore/ma
 
 Images are **pre-built on GitHub Actions** and pulled from GHCR (`latest`) — install/update does **not** compile on your server.
 
+**One-time:** make these packages **Public** (GitHub → Packages → each image → Package settings → Change visibility):
+
+- [neostore-api](https://github.com/users/neoauroraproject/packages/container/neostore-api/settings)
+- [neostore-storefront](https://github.com/users/neoauroraproject/packages/container/neostore-storefront/settings)
+- [neostore-admin](https://github.com/users/neoauroraproject/packages/container/neostore-admin/settings)
+
 | # | Action |
 |---|--------|
 | 1 | **Install** — domain, HTTPS, admin, store name |
