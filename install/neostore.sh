@@ -406,21 +406,21 @@ BANNER
   echo -e "  Self-hosted Marketplace Platform"
   echo -e "  Install dir: ${CYAN}${INSTALL_DIR}${NC}"
   echo
-  echo "  1) Install          نصب"
-  echo "  2) Update           به‌روزرسانی"
-  echo "  3) Uninstall        حذف"
-  echo "  4) Status           وضعیت"
-  echo "  5) Restart          ری‌استارت"
-  echo "  6) Logs             لاگ‌ها"
-  echo "  7) Change domain    تغییر دامنه"
-  echo "  0) Exit             خروج"
+  echo "  1) Install"
+  echo "  2) Update"
+  echo "  3) Uninstall"
+  echo "  4) Status"
+  echo "  5) Restart"
+  echo "  6) Logs"
+  echo "  7) Change domain"
+  echo "  0) Exit"
   echo
 }
 
 main_menu() {
   while true; do
     show_menu
-    prompt "Select / انتخاب" "1"
+    prompt "Select" "1"
     case "$REPLY" in
       1) do_install; read -r -p "Press Enter..."; ;;
       2) do_update; read -r -p "Press Enter..."; ;;
