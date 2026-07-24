@@ -12,10 +12,11 @@
 | Layer | Meaning |
 |-------|---------|
 | **Vision** | Long-term Marketplace Platform (multi-tenant, wallets, settlements, many product types) |
-| **Priority build (P0)** | First shippable vertical = **Store Core** (catalog, checkout, orders, customers, portal, Telegram Mini App / bot, manual payments, pluggable delivery) |
-| **Later (P1+)** | Full marketplace: multi-workspace economics, wallet ledger, more gateways, tickets, reviews, affiliates, … |
+| **Extensibility** | Extension Host + SDK (VS Code / Home Assistant style) — see [`docs/EXTENSIONS.md`](./docs/EXTENSIONS.md). **Architectural from day one**; full Plugin Manager = Platform v2 |
+| **Priority build (P0)** | First shippable vertical = **Store Core** (catalog, checkout, orders, customers, portal, Telegram Mini App / bot, payments, delivery) — implemented as **first-party extensions** on the Host, not irreversible Core hardcoding |
+| **Later (P1+)** | Full marketplace economics, then **Phase 2** community Plugin Manager / public SDK |
 
-**Build rule:** Implement P0 completely and production-ready before expanding P1. Architecture must not block P1 (multi-tenant Workspace from day one).
+**Build rule:** Implement P0 completely and production-ready before expanding P1. Schema is multi-tenant from day one. Payment / product type / delivery logic registers through the Extension Host even in P0.
 
 ---
 
@@ -32,7 +33,9 @@ Build a **modern, modular, self-hosted Marketplace Platform** that installs on U
 - Service Marketplace  
 - Physical Products  
 
-NeoStore is **Self-Hosted**, **API-first**, **plugin-oriented**, **Docker-native**, and **secure by default**.
+NeoStore is **Self-Hosted**, **API-first**, **extension-based** (not WordPress-style core hacks), **Docker-native**, and **secure by default**.
+
+Extensibility model (binding): [`docs/EXTENSIONS.md`](./docs/EXTENSIONS.md) — Event bus, Hooks, Manifest, Permissions, Official APIs, Plugin Manager (v2), Theme/Payment/Product SDKs.
 
 ---
 
@@ -217,13 +220,14 @@ P0 must support at least: **Digital, Voucher/GiftCard, License, Subscription, Se
 | **Instant** | After paid → auto fulfill (download, license, voucher, API, file) |
 | **Manual** | After paid → queue for seller/operator processing |
 
-Fulfillment providers (plugin interface):
+Fulfillment is always a **`delivery_provider` extension** (see EXTENSIONS.md). P0 ships official providers:
 
 - `manual`  
 - `entitlement_code` (inventory pool)  
 - `file_download`  
 - `custom_http`  
-- (later) type-specific providers  
+
+Core never embeds vendor-specific delivery as permanent non-extension code.
 
 ### 6.4 Order statuses (platform)
 
@@ -276,15 +280,15 @@ stateDiagram-v2
 
 ### 6.6 Payments (P0)
 
-**v1 gateways:**
+**v1 gateways (all as `payment_gateway` extensions):**
 
-1. Cryptomus  
-2. Manual Transfer (card-to-card)  
-3. Manual Crypto Transfer  
+1. Cryptomus (official extension)  
+2. Manual Transfer / card-to-card (official extension)  
+3. Manual Crypto Transfer (official extension)  
 
-**Later:** Stripe, PayPal, Thawani, NOWPayments, CoinPayments, BTCPay, Custom  
+**Later gateways:** also extensions only (Stripe, PayPal, Thawani, NOWPayments, CoinPayments, BTCPay, Custom). **No gateway hardcoded inside Core.**
 
-Architecture: `PaymentProvider` interface + workspace and/or platform credentials.
+Architecture: Extension Host loads `payment_gateway` + workspace/platform credentials via Settings API.
 
 Manual transfer config (per workspace):
 
@@ -487,14 +491,17 @@ All tenant tables include `workspaceId` (except pure platform tables).
 
 | Phase | Focus | Exit criteria |
 |-------|--------|----------------|
-| **P0.0** | Repo, Docker/install stubs, shared types, Postgres schema skeleton | `install` boots empty stack |
-| **P0.1** | Auth (JWT + workspace), Store profile, Categories, Products, Blueprints | Admin can CRUD catalog |
-| **P0.2** | Checkout + Manual bank/crypto + Cryptomus + order machine + admin review | End-to-end paid→delivered for Instant + Manual |
+| **P0.0** | Repo, Docker/install stubs, shared types, Postgres schema, **Extension Host skeleton** + Event/Hook buses | Empty stack boots; Host can register a noop extension |
+| **P0.1** | Auth (JWT + workspace), Store profile, Categories, Products, Blueprints as APIs + **official product_type / delivery extensions** | Admin CRUD catalog via Host-registered types |
+| **P0.2** | Checkout + **official payment extensions** (manual bank/crypto + Cryptomus) + order machine + admin review | End-to-end paid→delivered Instant + Manual |
 | **P0.3** | Customer portal + token/session + claim/renew/hide | Portal parity for store |
 | **P0.4** | Telegram bot + Mini App + broadcast + alerts | TMA purchase path works |
-| **P0.5** | Inventory stock, analytics, harden install.sh / compose | P0 release candidate |
-| **P1** | Wallet ledger + settlements + Super Admin economics | Multi-seller money flows |
-| **P1+** | Tickets, coupons, reviews, email templates, more gateways | Marketplace completeness |
+| **P0.5** | Inventory stock, analytics, harden install | P0 release candidate |
+| **P1** | Wallet ledger + settlements + Super Admin economics (events emitted for extensions) | Multi-seller money flows |
+| **Phase 2 / v2** | Full Plugin Manager (Git install), public `@neostore/sdk`, CLI, Themes UI, community catalog, integrity (+ later signatures) | 3rd party can ship a gateway without Core PR |
+| **P1+/P2+** | Tickets, coupons, reviews, email templates, official Extension Marketplace | Marketplace completeness |
+
+Detail for Phase 2: [`docs/EXTENSIONS.md`](./docs/EXTENSIONS.md).
 
 ---
 
@@ -513,6 +520,7 @@ All tenant tables include `workspaceId` (except pure platform tables).
 - [ ] Track page  
 - [ ] Analytics for completed revenue  
 - [ ] OpenAPI for public + workspace APIs  
+- [ ] Extension Host loads official payment/delivery/product_type extensions (no Core hardcode of gateways)  
 - [ ] No dependency on any external panel product  
 
 ---
@@ -520,9 +528,9 @@ All tenant tables include `workspaceId` (except pure platform tables).
 ## 12. Explicit non-goals for NeoStore repo
 
 - Do **not** couple to or import from other commercial panel codebases  
-- Do **not** hardcode a single vendor control plane as fulfillment  
-- VPN/VPS/etc. are **product types / plugins**, not the platform core  
+- Do **not** allow extensions to patch Core or touch the database directly  
+- VPN/VPS/etc. are **product type / delivery extensions**, not the platform core  
 
 ---
 
-*This SPEC is the only product authority for NeoStore engineering.*
+*This SPEC + [`docs/EXTENSIONS.md`](./docs/EXTENSIONS.md) + [`docs/PRD.md`](./docs/PRD.md) are the product authority for NeoStore engineering.*
