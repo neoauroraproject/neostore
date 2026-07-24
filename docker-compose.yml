@@ -1,48 +1,75 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: neostore
-      POSTGRES_PASSWORD: neostore
-      POSTGRES_DB: neostore
-    ports:
-      - "55432:5432"
+      POSTGRES_USER: ${POSTGRES_USER:-neostore}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-neostore}
+      POSTGRES_DB: ${POSTGRES_DB:-neostore}
     volumes:
       - neostore_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U neostore"]
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER"]
       interval: 5s
       timeout: 5s
-      retries: 10
+      retries: 20
+    networks:
+      - neostore
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6380:6379"
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
-      retries: 10
+      retries: 20
+    networks:
+      - neostore
 
   api:
     build:
       context: .
       dockerfile: apps/api/Dockerfile
-    env_file: .env.example
+    restart: unless-stopped
+    env_file: .env
     environment:
-      DATABASE_URL: postgresql://neostore:neostore@postgres:5432/neostore
+      DATABASE_URL: postgresql://${POSTGRES_USER:-neostore}:${POSTGRES_PASSWORD:-neostore}@postgres:5432/${POSTGRES_DB:-neostore}
       REDIS_URL: redis://redis:6379
-      JWT_SECRET: change-me-in-production
-      PUBLIC_BASE_URL: http://localhost:4100
       PORT: "4100"
-    ports:
-      - "4100:4100"
+    volumes:
+      - neostore_storage:/data/storage
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    networks:
+      - neostore
+    expose:
+      - "4100"
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./install/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+    networks:
+      - neostore
 
 volumes:
   neostore_pg:
+  neostore_storage:
+  caddy_data:
+  caddy_config:
+
+networks:
+  neostore:
+    driver: bridge
