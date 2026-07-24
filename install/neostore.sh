@@ -175,6 +175,8 @@ ADMIN_PASSWORD=${admin_password}
 ADMIN_NAME=${admin_name}
 STORE_NAME=${store_name}
 STORE_SLUG=${store_slug}
+NEOSTORE_VERSION=latest
+NEOSTORE_PULL_POLICY=always
 EOF
   chmod 600 "$INSTALL_DIR/.env"
 }
@@ -208,6 +210,32 @@ ${site_block} {
   }
 }
 EOF
+}
+
+compose_pull_up() {
+  local version="latest"
+  if [[ -f "$INSTALL_DIR/.env" ]]; then
+    # shellcheck disable=SC1091
+    set -a; source "$INSTALL_DIR/.env"; set +a
+    version="${NEOSTORE_VERSION:-latest}"
+  fi
+  export NEOSTORE_VERSION="$version"
+  export NEOSTORE_PULL_POLICY="${NEOSTORE_PULL_POLICY:-always}"
+  log "Pulling pre-built images (tag: ${version}) from GHCR..."
+  if ! compose pull; then
+    die "Failed to pull images. GitHub Actions may still be building — check https://github.com/neoauroraproject/neostore/actions"
+  fi
+  log "Starting stack (no local build)..."
+  compose up -d --remove-orphans
+}
+
+ensure_version_in_env() {
+  if [[ -f "$INSTALL_DIR/.env" ]] && ! grep -q '^NEOSTORE_VERSION=' "$INSTALL_DIR/.env"; then
+    {
+      echo "NEOSTORE_VERSION=latest"
+      echo "NEOSTORE_PULL_POLICY=always"
+    } >>"$INSTALL_DIR/.env"
+  fi
 }
 
 do_install() {
@@ -256,9 +284,7 @@ do_install() {
   # Ensure installer script is executable in install dir
   chmod +x "$INSTALL_DIR/install/"*.sh 2>/dev/null || true
 
-  log "Building and starting containers..."
-  compose pull || true
-  compose up -d --build
+  compose_pull_up
 
   log "Waiting for services (DB + API seed)..."
   local i=0
@@ -320,6 +346,7 @@ do_update() {
     cp -a "$env_bak" .env
     rm -f "$env_bak"
   fi
+  ensure_version_in_env
 
   # Regenerate reverse-proxy config from saved domain settings
   if [[ -f .env ]]; then
@@ -329,8 +356,7 @@ do_update() {
   fi
 
   chmod +x "$INSTALL_DIR/install/"*.sh 2>/dev/null || true
-  log "Rebuilding (API + storefront + admin)..."
-  compose up -d --build
+  compose_pull_up
   log "Update complete."
   compose ps
   if [[ -f .env ]]; then

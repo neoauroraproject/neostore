@@ -9,9 +9,7 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY apps/storefront/ ./
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_PUBLIC_API_URL=/api
-ARG NEXT_PUBLIC_STORE_SLUG=store
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-ENV NEXT_PUBLIC_STORE_SLUG=$NEXT_PUBLIC_STORE_SLUG
 RUN npm run build
 
 FROM node:20-alpine

@@ -1,0 +1,27 @@
+# Local development — build images on the machine instead of pulling GHCR
+# Usage: docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+services:
+  api:
+    image: neostore-api:dev
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+
+  storefront:
+    image: neostore-storefront:dev
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: apps/storefront/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api
+
+  admin:
+    image: neostore-admin:dev
+    pull_policy: build
+    build:
+      context: .
+      dockerfile: apps/admin/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: /api

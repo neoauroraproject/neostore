@@ -8,12 +8,12 @@
 bash <(curl -fsSL https://raw.githubusercontent.com/neoauroraproject/neostore/master/install/neostore.sh)
 ```
 
-Opens a menu:
+Images are **pre-built on GitHub Actions** and pulled from GHCR (`latest`) — install/update does **not** compile on your server.
 
 | # | Action |
 |---|--------|
-| 1 | **Install** — asks domain, HTTPS, admin email/password, store name |
-| 2 | **Update** |
+| 1 | **Install** — domain, HTTPS, admin, store name |
+| 2 | **Update** — `git pull` + `docker pull` (fast) |
 | 3 | **Uninstall** |
 | 4 | **Status** |
 | 5 | **Restart** |
@@ -21,13 +21,25 @@ Opens a menu:
 | 7 | **Change domain** |
 | 0 | Exit |
 
-Install path: `/opt/neostore` · reverse proxy: **Caddy** (ports 80/443)
+Paths: `/opt/neostore` · Caddy on **80/443**
 
-Re-open menu later:
+- Shop: `https://YOUR_DOMAIN/`
+- Admin: `https://YOUR_DOMAIN/admin`
+- API docs: `https://YOUR_DOMAIN/api/docs`
 
 ```bash
 sudo bash /opt/neostore/install/neostore.sh
 ```
+
+## Images
+
+| Image | Registry |
+|-------|----------|
+| API | `ghcr.io/neoauroraproject/neostore-api:latest` |
+| Storefront | `ghcr.io/neoauroraproject/neostore-storefront:latest` |
+| Admin | `ghcr.io/neoauroraproject/neostore-admin:latest` |
+
+CI: [Actions](https://github.com/neoauroraproject/neostore/actions) builds on every push to `master`.
 
 ## Docs
 
@@ -40,9 +52,9 @@ sudo bash /opt/neostore/install/neostore.sh
 ## Local development
 
 ```bash
-docker compose up -d postgres redis
-cp .env.example .env && cp .env.example apps/api/.env
-# For local API outside Docker, point DATABASE_URL at published ports if you expose them
+# Infra only, or full stack with local builds:
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+
 npm install
 cd apps/api && npx prisma db push && node prisma/seed.cjs
 npx nest build && node dist/main.js

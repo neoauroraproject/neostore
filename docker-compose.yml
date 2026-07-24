@@ -28,9 +28,8 @@ services:
       - neostore
 
   api:
-    build:
-      context: .
-      dockerfile: apps/api/Dockerfile
+    image: ${NEOSTORE_IMAGE_API:-ghcr.io/neoauroraproject/neostore-api}:${NEOSTORE_VERSION:-latest}
+    pull_policy: ${NEOSTORE_PULL_POLICY:-always}
     restart: unless-stopped
     env_file: .env
     environment:
@@ -50,16 +49,12 @@ services:
       - "4100"
 
   storefront:
-    build:
-      context: .
-      dockerfile: apps/storefront/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: /api
-        NEXT_PUBLIC_STORE_SLUG: ${STORE_SLUG:-store}
+    image: ${NEOSTORE_IMAGE_STOREFRONT:-ghcr.io/neoauroraproject/neostore-storefront}:${NEOSTORE_VERSION:-latest}
+    pull_policy: ${NEOSTORE_PULL_POLICY:-always}
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: /api
-      NEXT_PUBLIC_STORE_SLUG: ${STORE_SLUG:-store}
+      STORE_SLUG: ${STORE_SLUG:-store}
       PORT: "4102"
     depends_on:
       - api
@@ -69,11 +64,8 @@ services:
       - "4102"
 
   admin:
-    build:
-      context: .
-      dockerfile: apps/admin/Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: /api
+    image: ${NEOSTORE_IMAGE_ADMIN:-ghcr.io/neoauroraproject/neostore-admin}:${NEOSTORE_VERSION:-latest}
+    pull_policy: ${NEOSTORE_PULL_POLICY:-always}
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: /api
