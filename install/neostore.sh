@@ -299,18 +299,47 @@ do_update() {
   ensure_docker
   ensure_git
   cd "$INSTALL_DIR"
+
+  # Keep secrets; discard local edits to tracked installer files from previous install
+  local env_bak=""
+  if [[ -f .env ]]; then
+    env_bak="$(mktemp)"
+    cp -a .env "$env_bak"
+  fi
+
   log "Pulling latest code..."
   if [[ -d .git ]]; then
     git fetch --depth 1 origin "$REPO_BRANCH"
-    git checkout -B "$REPO_BRANCH" "origin/$REPO_BRANCH"
+    git reset --hard "origin/$REPO_BRANCH"
+    git clean -fd -e .env -e .env.bak -e 'install/Caddyfile' 2>/dev/null || true
   else
     warn "Not a git checkout — skipping git pull"
   fi
+
+  if [[ -n "$env_bak" && -f "$env_bak" ]]; then
+    cp -a "$env_bak" .env
+    rm -f "$env_bak"
+  fi
+
+  # Regenerate reverse-proxy config from saved domain settings
+  if [[ -f .env ]]; then
+    # shellcheck disable=SC1091
+    set -a; source .env; set +a
+    write_caddyfile "${DOMAIN:-}" "${TLS_SCHEME:-http}"
+  fi
+
   chmod +x "$INSTALL_DIR/install/"*.sh 2>/dev/null || true
-  log "Rebuilding..."
+  log "Rebuilding (API + storefront + admin)..."
   compose up -d --build
   log "Update complete."
   compose ps
+  if [[ -f .env ]]; then
+    # shellcheck disable=SC1091
+    set -a; source .env; set +a
+    echo
+    echo -e "  Shop:  ${BOLD}${PUBLIC_BASE_URL:-/}/${NC}"
+    echo -e "  Admin: ${BOLD}${PUBLIC_BASE_URL:-}/admin${NC}"
+  fi
 }
 
 do_uninstall() {
