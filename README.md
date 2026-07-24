@@ -1,35 +1,40 @@
 # NeoStore
 
-Standalone digital storefront platform: catalog, checkout, customer portal, Telegram Mini App, and pluggable fulfillment.
+**Self-hosted Marketplace Platform** — multi-tenant workspaces, typed products, wallets, Telegram Mini App, and pluggable fulfillment.
 
-This is an independent product — not part of any other panel.
+Standalone product. Build only inside this repository.
 
-## Workspace layout
+## Docs
+
+| Doc | Role |
+|-----|------|
+| [SPEC.md](./SPEC.md) | **Source of truth** — PRD + Store Core P0 build bible |
+| [docs/PRD.md](./docs/PRD.md) | Original Marketplace PRD intake |
+
+## Priority
+
+1. **P0 — Store Core** (shop, orders, customers, portal, Telegram, payments, delivery)  
+2. **P1+** — full marketplace (wallet ledger, settlements, tickets, coupons, …)
+
+## Layout
 
 ```
 NeoStore/
-  SPEC.md                 # Full product rebuild specification
-  apps/
-    api/                  # Backend API (NestJS)
-    admin/                # Admin dashboard
-    storefront/           # Public shop + portal + track + TMA
-  packages/
-    shared/               # Shared types & constants
-  install/                # Install / update scripts
-  docs/                   # Extra docs
+  SPEC.md
+  apps/api | admin | storefront
+  packages/shared
+  install/
+  docs/
 ```
 
-## Status
-
-Bootstrap in progress. See [SPEC.md](./SPEC.md) for the complete product definition.
-
-## Quick start (soon)
+## Install (target)
 
 ```bash
-npm install
-npm run dev
+bash install/install.sh
+# or
+docker compose up -d
 ```
 
 ## License
 
-Proprietary — NeoStudio / HMRay.
+Proprietary — NeoStudio.

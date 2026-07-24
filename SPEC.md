@@ -1,710 +1,528 @@
-# NeoStore — Product Rebuild Specification
+# NeoStore — Master Product Spec (PRD + Build Bible)
 
-> Complete blueprint to recreate NeoStore from scratch.
-> Domain-agnostic digital commerce + customer portal + Telegram ops.
-> Fulfillment is pluggable (not tied to any VPN/panel vendor).
-
-**Version:** 0.1.0-draft  
-**Product name:** NeoStore  
-**Audience:** engineers rebuilding or extending the platform
+**Product:** NeoStore  
+**Document:** SPEC v1.0  
+**Repo:** `D:/NeoStudio/sample/Projects/hmray/server/NeoStore` (standalone — no dependency on other panels)  
+**Status:** Source of truth for design & implementation
 
 ---
 
-## 1. Vision & boundaries
+## 0. How to read this document
 
-### 1.1 What NeoStore is
+| Layer | Meaning |
+|-------|---------|
+| **Vision** | Long-term Marketplace Platform (multi-tenant, wallets, settlements, many product types) |
+| **Priority build (P0)** | First shippable vertical = **Store Core** (catalog, checkout, orders, customers, portal, Telegram Mini App / bot, manual payments, pluggable delivery) |
+| **Later (P1+)** | Full marketplace: multi-workspace economics, wallet ledger, more gateways, tickets, reviews, affiliates, … |
 
-NeoStore is a **standalone storefront platform** that lets an operator:
-
-- Publish a branded public shop (`/shop/{slug}`)
-- Sell digital products with categories, prices (USD / IRT), badges, renewals
-- Collect **manual bank / card-to-card** payments with receipt review
-- Fulfill orders through **pluggable providers** (manual delivery, code inventory, custom APIs, …)
-- Give buyers a **customer portal** (permanent token + session)
-- Run a **Telegram bot + Mini App** (customer + admin ops, broadcast)
-- Track orders publicly (`/track/{code}`)
-- Analyze revenue and segment customers
-
-### 1.2 What NeoStore is not
-
-- Not a VPN control plane
-- Not dependent on any upstream panel product
-- Not a full PSP gateway (v1 payment rail is manual bank; architecture stays method-pluggable)
-
-### 1.3 Core vocabulary
-
-| Term | Meaning |
-|------|---------|
-| **Store** | One operator storefront (slug, branding, payments, telegram) |
-| **Category** | Merchandising group; also renewal compatibility gate |
-| **Product** | Sellable SKU |
-| **FulfillmentBlueprint** | How a product is delivered after payment approval |
-| **Entitlement** | Live customer asset after fulfillment (account, code, license, access) |
-| **AccessLink** | Customer-facing URL/code to use or reclaim an entitlement |
-| **Customer** | Buyer identity + permanent portal token |
-| **Order** | Purchase or renewal workflow unit |
-| **Payment** | Payment evidence & review state for an order |
-| **Timeline** | Append-only status history on an order |
+**Build rule:** Implement P0 completely and production-ready before expanding P1. Architecture must not block P1 (multi-tenant Workspace from day one).
 
 ---
 
-## 2. Roles
+## 1. Project vision
 
-| Role | Capabilities |
-|------|----------------|
-| **Admin** | Full store settings, catalog, order review, customer directory, broadcast, analytics |
-| **Customer** | Browse shop, checkout, portal login, renew, claim entitlement, hide entitlement, cancel pending orders |
-| **Telegram Admin Bot** | Bind admin chat, approve/reject orders, view revenue snapshot, compose broadcasts |
-| **System / Cron** | Auto-deliver due orders; expiry/quota warning notifications |
+Build a **modern, modular, self-hosted Marketplace Platform** that installs on Ubuntu with a few commands — not “just a shop”, but a **core** for many digital and physical businesses:
+
+- Gift Card Marketplace  
+- VPN Marketplace  
+- VPS Marketplace  
+- Software Marketplace  
+- Digital Products  
+- License Store  
+- Service Marketplace  
+- Physical Products  
+
+NeoStore is **Self-Hosted**, **API-first**, **plugin-oriented**, **Docker-native**, and **secure by default**.
 
 ---
 
-## 3. High-level architecture
+## 2. Installation (self-hosted)
 
-```mermaid
-flowchart LR
-  subgraph public [Public]
-    Shop[Storefront]
-    Portal[CustomerPortal]
-    Track[OrderTracker]
-    TMA[TelegramMiniApp]
-  end
-  subgraph adminUi [Admin]
-    Commerce[Orders_Products_Categories]
-    Customers[Directory_Broadcast]
-    Settings[Profile_Payments_Telegram]
-  end
-  subgraph core [Core]
-    Orders[OrderEngine]
-    Pay[PaymentReview]
-    Fulfill[FulfillmentProviders]
-    Notify[Notifications]
-  end
-  Shop --> Orders
-  Portal --> Orders
-  TMA --> Portal
-  Commerce --> Pay
-  Pay --> Fulfill
-  Fulfill --> Notify
-  Customers --> Notify
+### Targets
+
+- Ubuntu 22.04+  
+- Ubuntu 24.04+  
+
+### Install paths
+
+```bash
+bash install.sh
+# or
+docker compose up -d
 ```
 
-### Suggested monorepo
+### After install (auto-running)
+
+- PostgreSQL  
+- Redis  
+- Backend (NestJS API + workers)  
+- Frontend (Next.js App Router)  
+- Reverse proxy  
+- Queue worker (BullMQ)  
+
+Installer lives under `install/` and must never assume any other product is present.
+
+---
+
+## 3. Technical architecture
+
+| Layer | Choice |
+|-------|--------|
+| Backend | NestJS |
+| Frontend | Next.js (App Router) |
+| Database | PostgreSQL |
+| Cache | Redis |
+| Queue | BullMQ |
+| Realtime | WebSocket |
+| Storage | S3-compatible **and** local |
+| Auth | JWT · Telegram Login · Telegram Mini App · Email |
+
+### Monorepo layout
 
 ```
 NeoStore/
-  apps/api            # HTTP API + cron + telegram webhook
-  apps/admin          # Operator dashboard
-  apps/storefront     # Shop + portal + track + TMA shell
-  packages/shared     # Types, enums, payment config helpers
-  install/            # Independent install & update
   SPEC.md
+  apps/api              # NestJS API + cron + telegram webhooks + workers entry
+  apps/admin            # Super Admin + Workspace dashboards
+  apps/storefront       # Public marketplace / shop / portal / TMA
+  apps/worker           # BullMQ processors (optional split)
+  packages/shared       # Types, enums, zod schemas
+  install/              # install.sh, update.sh, docker compose
+  docs/
+```
+
+```mermaid
+flowchart TB
+  subgraph edge [Edge]
+    Proxy[ReverseProxy]
+  end
+  subgraph apps [Apps]
+    Admin[Admin_Next]
+    Store[Storefront_Next]
+    Api[API_Nest]
+    Worker[Worker_BullMQ]
+  end
+  subgraph data [Data]
+    PG[(PostgreSQL)]
+    Redis[(Redis)]
+    S3[(S3_or_Local)]
+  end
+  Proxy --> Admin
+  Proxy --> Store
+  Proxy --> Api
+  Api --> PG
+  Api --> Redis
+  Api --> S3
+  Worker --> PG
+  Worker --> Redis
+  Api --> Worker
 ```
 
 ---
 
-## 4. Data model
+## 4. Core philosophy — Multi-Tenant Workspaces
 
-### 4.1 Enums
+The system is **multi-tenant**.
 
-**OrderStatus**
+Each seller is a **Workspace**.
 
-`PENDING_PAYMENT` → `PAYMENT_SUBMITTED` → `UNDER_REVIEW` → `APPROVED` → `PROVISIONING` → (`PROVISION_FAILED` | `ACTIVE` | `RENEWED`) | `REJECTED` | `CANCELLED` | `EXPIRED`
+Each Workspace owns:
 
-**PaymentMethod (v1)**  
-`MANUAL_BANK`
+- Products & categories  
+- Orders  
+- Members (RBAC)  
+- Wallet / balances (via ledger)  
+- Settings & branding  
+- Telegram bot  
+- Reports  
 
-**PaymentStatus**  
-`PENDING` | `SUBMITTED` | `APPROVED` | `REJECTED` | `REFUNDED`
+**Super Admin** owns the platform (tenants, global gateways, settlements, email, templates).
 
-**EntitlementStatus (derived or stored)**  
-`active` | `expired` | `disabled` | `depleted` | `pending_delivery`
-
-### 4.2 StoreProfile (1 per operator account)
-
-| Field | Type | Notes |
-|-------|------|-------|
-| id | uuid | PK |
-| ownerId | uuid | Operator account (unique) |
-| slug | string | Unique public key |
-| domainId | uuid? | Optional custom domain |
-| title, description, logo, theme | string/json | Presentation |
-| paymentConfig | json | See §10 |
-| bankName, bankCardNumber, bankCardHolder, bankIban | string? | Legacy mirrors of primary card |
-| paymentInstructions, bankAccountInfo | string? | Legacy |
-| supportLinks | json? | Often overridden by Branding |
-| defaultCurrency | string | `USD` \| `IRT` |
-| enabled | bool | Public store on/off |
-| telegramBotEnabled | bool | |
-| telegramBotTokenEnc | string? | Encrypted at rest |
-| telegramBotUsername | string? | |
-| telegramWebhookSecret | string? | Path secret |
-| telegramWelcomeText | string? | |
-| telegramAdminChatId | string? | |
-| autoDeliverEnabled | bool | |
-| autoDeliverDelayMinutes | int | 1–1440 |
-| nextOrderNumber | int | Sequential tracking (~from 1000) |
-| createdAt, updatedAt | datetime | |
-
-### 4.3 Category
-
-`id`, `ownerId`, `name`, `description?`, `icon?`, `sortOrder`, `visible`, `enabled`, timestamps
-
-### 4.4 FulfillmentBlueprint
-
-| Field | Notes |
-|-------|-------|
-| id, ownerId, name, description? | |
-| providerType | `manual` \| `entitlement_code` \| `custom_http` \| … |
-| providerConfig | json — provider-specific |
-| renewalPolicy | json — how renewals extend entitlements |
-| enabled | bool |
-
-Examples of `providerConfig`:
-
-```json
-// manual
-{ "instructions": "Deliver access details in portal notes after approve" }
-
-// entitlement_code
-{ "inventoryPoolId": "...", "codeFormat": "plain", "oneTime": true }
-
-// custom_http
-{ "createUrl": "https://provider.example/fulfill", "headers": { "Authorization": "…" } }
-```
-
-### 4.5 ProductTemplate (optional)
-
-`id`, `ownerId`, `blueprintId?`, `name`, `description?`, `priceToman?`, `priceUsd`, `quotaUnits?`, `durationDays`, `extra?`
-
-> Templates can clone into Products. UI may lag API.
-
-### 4.6 Product
-
-| Field | Notes |
-|-------|-------|
-| id, ownerId | |
-| categoryId | Required |
-| blueprintId | FulfillmentBlueprint |
-| templateId? | |
-| name, description? | |
-| priceToman?, priceUsd | |
-| quotaUnits | Generic quota (bytes/credits/seats — unit defined by blueprint) |
-| durationDays | Access length |
-| status | e.g. `active` |
-| badge?, sortOrder, featured, visible, renewable | |
-| maxQuantity? | |
-
-### 4.7 Customer
-
-| Field | Notes |
-|-------|-------|
-| id, ownerId | |
-| token | Unique permanent portal token (`NS-XXXX-XXXX-XXXX` or similar) |
-| name?, telegram?, telegramUserId?, telegramUsername? | |
-| whatsapp?, email? | |
-| status, notes? | |
-| notificationPrefs | json |
-| metadata | json — see below |
-| lastSeenAt?, lastLoginAt?, loginCount | |
-| Unique | `(ownerId, telegramUserId)` when telegramUserId set |
-
-**`metadata` shape**
-
-```json
-{
-  "linkedEntitlementIds": ["uuid", "..."],
-  "hiddenEntitlementIds": ["uuid", "..."],
-  "telegramAlerts": { "expiry:ENT_ID": 1710000000000 }
-}
-```
-
-### 4.8 CustomerSession
-
-`id`, `customerId`, `tokenHash` (SHA-256 of session token), `userAgent?`, `ipAddress?`, `createdAt`, `lastUsedAt`, `expiresAt` (default **14 days**), `revokedAt?`
-
-Header: `x-customer-session: <raw session token>`
-
-### 4.9 CustomerNotification / CustomerActivity
-
-Notification: `id`, `customerId`, `type`, `title`, `message`, `payload` json, `readAt?`, `createdAt`  
-Activity: `id`, `customerId`, `orderId?`, `type`, `title`, `message`, `metadata?`, `createdAt`
-
-Unread notifications may collapse per `orderId` in UI.
-
-### 4.10 Order
-
-| Field | Notes |
-|-------|-------|
-| id | |
-| trackingCode | Unique; sequential preferred |
-| storeId, productId, customerId | |
-| configName | Buyer-facing label / entitlement seed name |
-| amount, currency | |
-| status | OrderStatus |
-| rejectReason?, provisionError?, notes? | |
-| entitlementId? | Created/linked entitlement |
-| isRenewal | bool |
-| renewEntitlementId? | Target entitlement for renewals |
-| autoDeliverAt?, autoDelivered, pendingReview | Auto-deliver flags |
-| renewSnapshot | json — state before renewal for reject-rollback |
-| timestamps | |
-
-### 4.11 Payment
-
-`id`, `orderId` (unique), `method`, `status`, `amount`, `currency`, `receiptText?`, `receiptImage?`, `metadata?`, `reviewedAt?`, `reviewedBy?`, `rejectReason?`
-
-### 4.12 OrderTimelineEvent
-
-`id`, `orderId`, `status` (string — may include `CREATED`, `CONFIRMED`, `AUTO_DELIVERED` beyond enum), `message`, `actor` (`customer`\|`admin`\|`system`), `metadata?`, `createdAt`
-
-### 4.13 Entitlement
-
-Live delivered asset (provider-agnostic):
-
-| Field | Notes |
-|-------|-------|
-| id, ownerId, customerId? | customer may be linked later via claim |
-| blueprintId?, productId?, orderId? | Provenance |
-| label | Display name |
-| externalRef? | Provider-side id |
-| accessKey? | Public claim/redeem key (AccessLink material) |
-| accessUrl? | Optional URL |
-| enable | bool |
-| quotaTotal, quotaUsed | Generic units (0 total = unlimited) |
-| expiresAt | null/0 = no expiry |
-| payload | json — provider secrets/details shown in portal as allowed |
-| createdAt, updatedAt | |
-
-### 4.14 Related optional modules
-
-- **Brand**: logos, colors, footer, support links injected into public surfaces  
-- **Domain**: custom hostname for store when verified + TLS ready  
-- **InventoryPool / InventoryItem**: for `entitlement_code` provider
+P0 may ship with a single active Workspace for simplicity, but the schema is multi-tenant from day one (`workspaceId` on all tenant data).
 
 ---
 
-## 5. Order state machine
+## 5. User roles
+
+### Super Admin
+
+Full platform control:
+
+- System settings  
+- Workspaces / sellers  
+- Global orders oversight  
+- Payment gateways  
+- Settlements  
+- Email / SMTP / templates  
+- Users  
+- Reports  
+
+### Workspace Owner
+
+- Own store/catalog/orders  
+- Revenue & inventory views  
+- Settlement requests  
+- Members  
+- Workspace Telegram bot  
+
+### Workspace Admin
+
+Scoped by Owner permissions.
+
+### Operator
+
+Order processing only.
+
+### Customer
+
+- Buy  
+- Wallet top-up / spend  
+- Orders, downloads, tickets, profile  
+- Telegram Mini App experience  
+
+---
+
+## 6. Priority: Store Core (P0) — detailed contract
+
+This section is the **first product to build**. It mirrors a complete operator storefront experience: shop, payments review, fulfillment, customers, portal, Telegram.
+
+### 6.1 Vocabulary (P0)
+
+| Term | Meaning |
+|------|---------|
+| Workspace | Tenant / seller |
+| Storefront | Public shop for a workspace (`/shop/{slug}` or custom domain) |
+| Category | Merchandising + renewal compatibility gate |
+| Product | SKU with **ProductType** + delivery mode |
+| FulfillmentBlueprint | How delivery happens (provider + config) |
+| Entitlement | Delivered asset (file, voucher, license, access, service record) |
+| AccessLink | Claim/redeem URL or code |
+| Customer | Buyer (Telegram / email / token) |
+| Order | Purchase or renewal unit |
+| Payment | Payment attempt / evidence |
+| Timeline | Append-only order history |
+
+### 6.2 Product types (extensible)
+
+Each product has a `type` with type-specific fields (JSON schema per type):
+
+`Digital` · `Voucher` · `GiftCard` · `VPN` · `VPS` · `Software` · `License` · `Subscription` · `Physical` · `Service`
+
+P0 must support at least: **Digital, Voucher/GiftCard, License, Subscription, Service** (+ generic custom fields). Others plug in via type modules.
+
+### 6.3 Delivery modes
+
+| Mode | Behavior |
+|------|----------|
+| **Instant** | After paid → auto fulfill (download, license, voucher, API, file) |
+| **Manual** | After paid → queue for seller/operator processing |
+
+Fulfillment providers (plugin interface):
+
+- `manual`  
+- `entitlement_code` (inventory pool)  
+- `file_download`  
+- `custom_http`  
+- (later) type-specific providers  
+
+### 6.4 Order statuses (platform)
+
+Canonical platform statuses:
+
+`PendingPayment` · `Paid` · `Processing` · `Completed` · `Delivered` · `Cancelled` · `Refunded` · `Disputed`
+
+**Internal mapping for Store Core automation** (keep fine-grained timeline events):
+
+| Internal / timeline | Maps to |
+|---------------------|---------|
+| PENDING_PAYMENT | PendingPayment |
+| PAYMENT_SUBMITTED / UNDER_REVIEW | PendingPayment (awaiting confirm) or Paid when accepted |
+| APPROVED / PROVISIONING | Processing |
+| ACTIVE / RENEWED / Delivered entitlement | Completed / Delivered |
+| PROVISION_FAILED | Processing (retry) or Disputed |
+| REJECTED / CANCELLED | Cancelled |
+| REFUND paths | Refunded |
+
+UI may show both customer-friendly status and admin timeline.
+
+### 6.5 Order state machine (Store Core)
 
 ```mermaid
 stateDiagram-v2
-  [*] --> PENDING_PAYMENT: create without receipt
-  [*] --> UNDER_REVIEW: create with receipt
-  PENDING_PAYMENT --> UNDER_REVIEW: receipt submitted
-  UNDER_REVIEW --> APPROVED: admin approve
-  UNDER_REVIEW --> PROVISIONING: auto_deliver cron
-  UNDER_REVIEW --> REJECTED: admin reject
-  UNDER_REVIEW --> CANCELLED: admin_or_customer cancel
-  APPROVED --> PROVISIONING: fulfill
-  PROVISIONING --> ACTIVE: new order success
-  PROVISIONING --> RENEWED: renewal success
-  PROVISIONING --> PROVISION_FAILED: error
-  PROVISION_FAILED --> PROVISIONING: retry
-  ACTIVE --> REJECTED: reject after auto_deliver reverse
-  RENEWED --> REJECTED: reject after auto_deliver restore_snapshot
+  [*] --> PendingPayment: create
+  PendingPayment --> Paid: payment_confirmed
+  Paid --> Processing: fulfill_start
+  Processing --> Delivered: fulfill_ok_new
+  Processing --> Completed: fulfill_ok_renewal
+  Processing --> Processing: fulfill_retry
+  PendingPayment --> Cancelled: cancel_or_reject
+  Paid --> Cancelled: cancel_before_fulfill
+  Delivered --> Refunded: refund
+  Completed --> Refunded: refund
+  Delivered --> Disputed: dispute
 ```
 
-### 5.1 Checkout rules
+**Checkout rules (P0):**
 
-- No receipt → `PENDING_PAYMENT` + payment `PENDING`
-- With receipt → `UNDER_REVIEW` + payment `SUBMITTED`; if auto-deliver on → `pendingReview=true`, `autoDeliverAt=now+delay`
-- Renewals **require** receipt
-- Tracking code = sequential `nextOrderNumber` (fallback random unique)
+- Manual bank / manual crypto: customer uploads receipt → review queue  
+- Cryptomus (P0 payment): webhook → Paid  
+- Renewals require proof when using manual rails  
+- Sequential tracking codes per workspace  
+- Optional **auto-deliver** after delay with `pendingReview` for manual confirm/reverse  
 
-### 5.2 Approve
+**Cancelable before fulfillment:** PendingPayment, early Paid/Processing failure states.
 
-- Normal: payment → `APPROVED`, then fulfill → `ACTIVE` / `RENEWED`
-- Already approved / failed: approve retries fulfill
-- Auto-delivered + `pendingReview`: approve only clears review (`CONFIRMED` timeline); do **not** send a second “payment approved” customer ping
+**Revenue:** Completed/Delivered (and successful renewals) with approved payment.
 
-### 5.3 Reject
+### 6.6 Payments (P0)
 
-- Before fulfill: mark rejected
-- After auto-deliver: reverse fulfillment (delete new entitlement **or** restore `renewSnapshot`)
+**v1 gateways:**
 
-### 5.4 Auto-deliver (cron ~1 min)
+1. Cryptomus  
+2. Manual Transfer (card-to-card)  
+3. Manual Crypto Transfer  
 
-Due when: `autoDeliverAt <= now`, `autoDelivered=false`, `pendingReview`, status in `UNDER_REVIEW|PAYMENT_SUBMITTED`  
-Then fulfill, set `ACTIVE|RENEWED`, `autoDelivered=true`, keep `pendingReview`, notify customer + short admin ping
+**Later:** Stripe, PayPal, Thawani, NOWPayments, CoinPayments, BTCPay, Custom  
 
-### 5.5 Cancelable (admin UI)
+Architecture: `PaymentProvider` interface + workspace and/or platform credentials.
 
-`PENDING_PAYMENT`, `PAYMENT_SUBMITTED`, `UNDER_REVIEW`, `APPROVED`, `PROVISIONING`, `PROVISION_FAILED`
+Manual transfer config (per workspace):
 
-### 5.6 Revenue
+```ts
+paymentConfig: {
+  methods: { manual_bank: boolean; manual_crypto: boolean; cryptomus: boolean };
+  cards: Array<{ id, bankName, cardNumber, cardHolder, iban?, instructions?, enabled? }>;
+  cryptoAddresses?: Array<{ id, network, address, label?, enabled? }>;
+}
+```
 
-Count only orders with status `ACTIVE` or `RENEWED` and payment null or `APPROVED`.
+### 6.7 Customer auth & portal (P0)
 
----
+- Permanent customer token (e.g. `NS-XXXX-…`) issued at checkout / Telegram  
+- Session via `x-customer-session` (hash at rest, ~14d TTL)  
+- Telegram Login + Mini App `initData` HMAC → auto-provision account  
+- Email login (P0 skeleton; full verification templates with Email System)  
 
-## 6. Fulfillment Provider contract
+Portal tabs: home · orders · wallet (stub→full) · alerts · downloads · profile  
+
+Actions: buy · renew (category gate) · claim AccessLink · hide entitlement · cancel pending · tickets (P1 UI stub ok)
+
+### 6.8 Admin surfaces (P0)
+
+| Area | Sub |
+|------|-----|
+| Overview | Summary KPIs, Analytics |
+| Commerce | Orders, Products, Categories, Blueprints/Inventory |
+| Customers | Directory (segments), Broadcast |
+| Settings | Profile, Payments, Cards/Crypto, Telegram, Branding |
+
+Customer directory **must** show correct entitlement counts (list = detail). Heal broken order↔entitlement links via label/`configName` when FK missing.
+
+### 6.9 Public routes (P0)
+
+| Route | Role |
+|-------|------|
+| `/shop/[slug]` | Storefront checkout |
+| `/shop/[slug]/portal` | Login |
+| `/shop/[slug]/portal/dashboard` | Portal |
+| `/track/[code]` | Public tracking |
+| `/portal/...` | Global portal helpers |
+| TMA | Same UI + silent Telegram session |
+
+### 6.10 Telegram (P0 — high priority)
+
+**Mini App:** auto login, products, search, buy, wallet, orders, notifications, profile (native-feel).
+
+**Per-workspace bot:** token, admin chat id.
+
+Notifications: new order · payment success · low stock · new user · (later) ticket · settlement  
+
+Commands / callbacks (workspace admin bot):
+
+- `/start`, `/admin` bind chat  
+- `approve:{orderId}` / `reject:{orderId}`  
+- broadcast audiences: `all` | `with_service` | `without_service`  
+- revenue snapshot  
+
+Hourly jobs: expiry / quota warnings with cooldown metadata.
+
+### 6.11 Store Core APIs (P0 sketch)
+
+**Workspace admin** (JWT + workspace scope): dashboard, profile, categories, blueprints, products, orders (approve/reject/fulfill/cancel), customers (+ entitlement patch), telegram, analytics, broadcast.
+
+**Public:** catalog by slug/domain, checkout, track, customer session, portal, renew, claim, hide, telegram session/webhook.
+
+Rate-limit all public mutating endpoints.
+
+### 6.12 Inventory (P0)
+
+Per product: **Unlimited** or **Stock-based** (pool of codes/files/units).  
+Low-stock alerts to Telegram.
+
+### 6.13 Fulfillment provider interface
 
 ```ts
 interface FulfillmentProvider {
   type: string;
-
-  /** Create entitlement for a new purchase */
-  fulfillNew(ctx: FulfillContext): Promise<{ entitlementId: string; access?: AccessInfo }>;
-
-  /** Extend / top-up an existing entitlement */
-  fulfillRenewal(ctx: RenewContext): Promise<{ entitlementId: string }>;
-
-  /** Undo auto-delivered new order */
-  reverseNew?(ctx: ReverseContext): Promise<void>;
-
-  /** Restore pre-renewal snapshot */
-  reverseRenewal?(ctx: ReverseRenewContext): Promise<void>;
-
-  /** Resolve AccessLink → entitlement (for claim/renew-by-link) */
-  resolveAccessLink?(ownerId: string, link: string): Promise<{ entitlementId: string }>;
+  fulfillNew(ctx): Promise<{ entitlementId: string; access?: AccessInfo }>;
+  fulfillRenewal(ctx): Promise<{ entitlementId: string }>;
+  reverseNew?(ctx): Promise<void>;
+  reverseRenewal?(ctx): Promise<void>;
+  resolveAccessLink?(workspaceId: string, link: string): Promise<{ entitlementId: string }>;
 }
 ```
 
-### 6.1 Built-in providers (v1)
+---
 
-1. **ManualDelivery** — marks entitlement `pending_delivery`; admin completes delivery in UI  
-2. **EntitlementCode** — pops next unused code from inventory pool; exposes as AccessLink  
+## 7. Marketplace platform (P1+) — full PRD scope
 
-Providers must be isolated behind this interface so NeoStore never hardcodes a vendor panel.
+These features are **in scope for NeoStore** but scheduled after Store Core P0 is solid.
 
-### 6.2 Post-fulfill links
+### 7.1 Wallet + Ledger (mandatory design even if UI later)
 
-Always:
+Users have an internal wallet. **No raw balance column as source of truth.**
 
-1. Set `Order.entitlementId`
-2. Append entitlement id to `Customer.metadata.linkedEntitlementIds`
-3. Emit timeline + customer notification (`service_ready` / subscription updated)
+All money movements are **ledger entries**; balance = sum(ledger).
 
-### 6.3 Renewal compatibility
+Entry types: `Deposit` · `Purchase` · `Refund` · `Commission` · `Adjustment` · `Settlement` · `Withdrawal`
 
-Renew product **must** share the same **Category** as the last `ACTIVE`/`RENEWED` order for that entitlement.
+Capabilities: top-up · view balance/tx · pay from wallet · refund · admin withdraw (later).
+
+### 7.2 Settlement (v1 economics)
+
+- Platform can receive funds at Super Admin / platform gateways  
+- Per workspace: revenue · commission · settleable balance  
+- Manual settlement in v1; auto-settlement later  
+
+### 7.3 Email system (Super Admin)
+
+SMTP (host, port, TLS/SSL, user, pass, sender) + templates:
+
+Welcome · Order · Payment · Refund · Reset Password · Verification · Settlement  
+
+### 7.4 Notifications matrix
+
+Dashboard · Telegram · Email · Realtime WebSocket · Browser Push (later)
+
+### 7.5 Coupons
+
+Fixed · Percentage · Expiration · Usage limit · Per-user limit  
+
+### 7.6 Reviews
+
+Rating · comment · seller reply  
+
+### 7.7 Tickets
+
+Customer ↔ Workspace internal tickets  
+
+### 7.8 Customer feature set (full)
+
+Profile · Wallet · Orders · Downloads · Tickets · Invoices · Notifications · Addresses  
+
+### 7.9 Reports
+
+Sales · Revenue · Users · Products · Payments · Settlements — professional dashboards  
+
+### 7.10 Settings modules
+
+General · SEO · Branding (logo, favicon, theme) · SMTP · Payment · Telegram · Storage · CDN · Security · Maintenance Mode  
+
+### 7.11 Security
+
+2FA · JWT · Rate limiting · Audit logs · RBAC · CSRF · XSS · File validation · API rate limits  
+
+### 7.12 APIs
+
+REST · OpenAPI · Webhooks · Public API · Workspace API keys  
+
+### 7.13 UI/UX principles
+
+Modern · Minimal · Premium · Fast · Responsive · Mobile-first · Dark/Light · Animations · Clean cards · Realtime · Professional dashboards  
+
+### 7.14 Future roadmap
+
+Auto settlement · Affiliates · Subscription billing · Multi currency · Commission rules · AI assistant · Analytics · Mobile app · PWA · Inventory automation · Plugin marketplace · Theme marketplace · i18n · Multi domain · White label · SSO · Webhooks · Automation engine  
 
 ---
 
-## 7. Admin API
+## 8. Data model outline (platform-ready)
 
-Base: `/api/admin` (or `/api/store` under admin auth)  
-Auth: operator JWT
+### Platform
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| GET | `/dashboard` | KPIs: today/pending/new/completed, revenue, products, customers, renewals, slug |
-| GET/PUT | `/profile` | Store settings |
-| GET/POST | `/categories` | List/create |
-| PATCH/DELETE | `/categories/:id` | Update/delete |
-| GET/POST | `/blueprints` | Fulfillment blueprints |
-| GET | `/blueprint-options` | Provider types + option schemas |
-| PATCH/DELETE | `/blueprints/:id` | Update/delete |
-| GET/POST | `/templates` | Product templates |
-| PATCH/DELETE | `/templates/:id` | |
-| POST | `/templates/:id/clone` | Clone → product (`categoryId`) |
-| GET/POST | `/products` | |
-| PATCH/DELETE | `/products/:id` | |
-| GET | `/orders?status=` | |
-| GET | `/orders/:id` | Detail + timeline/payment/entitlement |
-| POST | `/orders/:id/approve` | |
-| POST | `/orders/:id/reject` | body `{ reason? }` |
-| POST | `/orders/:id/fulfill` | Manual (re)fulfill |
-| POST | `/orders/:id/cancel` | |
-| GET | `/customers?segment&search` | Segments below |
-| GET | `/customers/:id` | Detail + entitlements (+ heal links) |
-| PATCH | `/customers/:id/entitlements/:id` | Edit label/enable/quota/expiry/accessKey + optional Telegram notify |
-| GET/PUT | `/telegram` | Bot settings |
-| POST | `/telegram/test` | |
-| POST | `/telegram/activate` | Register webhook |
-| GET | `/analytics?range&groupBy&categoryId` | `7d\|30d\|90d\|365d`, `day\|week\|month` |
-| GET | `/telegram/broadcast/preview?audience` | |
-| POST | `/telegram/broadcast` | `{ text, audience, photoDataUrl? }` |
+`User` · `Session` · `RoleBinding` · `AuditLog` · `PlatformSettings` · `EmailTemplate` · `PaymentGatewayConfig`
 
-**Customer segments:** `all` | `new` | `with_service` | `without_service` | `telegram_only`
+### Tenant
 
-**Customer list `serviceCount`:** count **existing** entitlements only (orders + `linkedEntitlementIds` + heal via `configName`/label when FK missing). Never count dead IDs.
+`Workspace` · `WorkspaceMember` · `StoreProfile` (slug, branding, telegram, paymentConfig, autoDeliver…)  
+`Category` · `Product` · `ProductTypeConfig` · `FulfillmentBlueprint` · `InventoryPool` · `InventoryItem`  
+`Customer` · `CustomerSession` · `CustomerNotification` · `CustomerActivity`  
+`Order` · `Payment` · `OrderTimelineEvent` · `Entitlement`  
+`Coupon` · `Review` · `Ticket` · `TicketMessage`  
+`LedgerAccount` · `LedgerEntry` · `Settlement` · `SettlementItem`  
+`Domain` · `MediaAsset`
+
+All tenant tables include `workspaceId` (except pure platform tables).
 
 ---
 
-## 8. Public API
+## 9. Development principles
 
-Base: `/api/public` or `/store`
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| GET | `/public/:slug` | — | Catalog + branding + payment cards |
-| GET | `/public/by-domain` | Host / `?domain=` | Resolve store by custom domain |
-| POST | `/public/:slug/customer` | body `token` | Lookup customer |
-| POST | `/public/:slug/order` | CheckoutPayload | Guest/token checkout |
-| GET | `/track/:code` | — | Order tracking (+ delivery when active) |
-| POST | `/customer/session` | body `token` | Login → session |
-| GET | `/customer/session` | session header | Dashboard |
-| POST | `/customer/logout` | session | Revoke |
-| POST | `/customer/notifications/:id/read` | session | |
-| POST | `/customer/notifications/read-all` | session | |
-| GET | `/portal/:token` | permanent token | Legacy portal |
-| POST | `/portal/:token/renew` | | Renew checkout |
-| POST | `/customer/renew` | session | Renew |
-| POST | `/customer/order` | session | New purchase while logged in |
-| POST | `/customer/orders/:id/cancel` | session | Cancel pre-fulfillment |
-| POST | `/customer/entitlements/claim` | session + AccessLink | Attach existing |
-| POST | `/customer/entitlements/:id/hide` | session | Hide from portal list only |
-| POST | `/telegram/session` | `{ slug, initData }` | TMA silent login |
-| POST | `/telegram/webhook/:slug/:secret` | Telegram | Bot updates |
-
-### 8.1 Checkout payloads
-
-```ts
-CheckoutPayload = {
-  productId: string;
-  configName?: string;
-  name?: string;
-  telegram?: string;
-  whatsapp?: string;
-  email?: string;
-  notes?: string;
-  receiptText?: string;
-  receiptImage?: string;
-  customerToken?: string;
-  haveToken?: boolean;
-  isRenewal?: boolean;
-  renewEntitlementId?: string;
-  currency?: string;
-};
-
-RenewCheckoutPayload = {
-  entitlementId?: string;
-  accessLink?: string;
-  productId: string;
-  receiptText?: string;
-  receiptImage?: string;
-  notes?: string;
-  currency?: string;
-};
-
-ClaimPayload = { accessLink: string };
-```
-
-### 8.2 Rate limits (suggested, per IP/key, 10 min window)
-
-| Key | Limit |
-|-----|-------|
-| checkout | 10 |
-| tracking | 120 |
-| customerLookup | 20 |
-| customerLogin | 15 |
-| renewal | 12 |
-| claim | 15 |
-| telegramSession | 30 |
-| telegramWebhook | 120 |
+- Production ready  
+- Modular / plugin-based  
+- Scalable & Docker native  
+- Self-hosted  
+- API first  
+- Secure by default  
+- High performance  
+- Easily extensible  
+- Clean code  
+- Comprehensive documentation  
+- Automated testing  
+- **Zero mock data in production**  
 
 ---
 
-## 9. Customer portal
+## 10. Implementation phases (binding)
 
-### 9.1 Auth
-
-1. Permanent token printed at checkout / Telegram (`NS-…`)
-2. `POST /customer/session` → session cookie/header (14d)
-3. Portal dashboard loads entitlements, orders, notifications, renew-compatible products
-
-### 9.2 Tabs
-
-`home` | `orders` | `alerts` (+ buy / renew sheets)
-
-### 9.3 Entitlement actions
-
-- View quota / expiry / access
-- Renew (category-compatible products + receipt)
-- Claim via AccessLink
-- Hide from list (metadata only — does not delete)
-
-### 9.4 Admin customer drawer
-
-Must show:
-
-1. Profile (token, telegram, contacts, stats)
-2. Entitlements list (status, quota bar, expiry, access key copy, edit)
-3. Orders list (click focuses entitlement)
-
-Heal broken links: if order is `ACTIVE`/`RENEWED` with `configName` but missing entitlement FK, resolve by label/externalRef and re-attach.
+| Phase | Focus | Exit criteria |
+|-------|--------|----------------|
+| **P0.0** | Repo, Docker/install stubs, shared types, Postgres schema skeleton | `install` boots empty stack |
+| **P0.1** | Auth (JWT + workspace), Store profile, Categories, Products, Blueprints | Admin can CRUD catalog |
+| **P0.2** | Checkout + Manual bank/crypto + Cryptomus + order machine + admin review | End-to-end paid→delivered for Instant + Manual |
+| **P0.3** | Customer portal + token/session + claim/renew/hide | Portal parity for store |
+| **P0.4** | Telegram bot + Mini App + broadcast + alerts | TMA purchase path works |
+| **P0.5** | Inventory stock, analytics, harden install.sh / compose | P0 release candidate |
+| **P1** | Wallet ledger + settlements + Super Admin economics | Multi-seller money flows |
+| **P1+** | Tickets, coupons, reviews, email templates, more gateways | Marketplace completeness |
 
 ---
 
-## 10. Settings shapes
+## 11. Acceptance checklist — P0 Store Core
 
-### 10.1 Store profile PUT
-
-```ts
-{
-  title: string;
-  slug: string;
-  description?: string;
-  enabled: boolean;
-  domainId?: string | null;
-  defaultCurrency: "USD" | "IRT";
-  autoDeliverEnabled: boolean;
-  autoDeliverDelayMinutes: number; // 1..1440
-  paymentConfig: {
-    methods: { manual_bank: boolean };
-    cards: Array<{
-      id: string;
-      bankName: string;
-      cardNumber: string;
-      cardHolder: string;
-      iban?: string;
-      instructions?: string;
-      enabled?: boolean;
-    }>;
-  };
-  bankName?: string;
-  bankCardNumber?: string;
-  bankCardHolder?: string;
-  bankIban?: string;
-  paymentInstructions?: string;
-  bankAccountInfo?: string;
-}
-```
-
-### 10.2 Telegram PUT
-
-```ts
-{ enabled?: boolean; botToken?: string; welcomeText?: string; adminChatId?: string }
-```
-
-Webhook: `{PUBLIC_BASE}/store/telegram/webhook/{slug}/{secret}`  
-Mini App URL: `{customDomain|base}/shop/{slug}?tg=1`
-
-### 10.3 Branding (separate module)
-
-Injected into public store/portal/track: `name`, `logo`, `logoDark`, `primaryColor`, `accentColor`, `footerText`, `theme`, `supportLinks`.
+- [ ] One-command / compose install on Ubuntu 22/24  
+- [ ] Multi-tenant schema (`workspaceId`) even if single workspace UI  
+- [ ] Public shop by slug with categories & typed products  
+- [ ] Manual bank + manual crypto + Cryptomus  
+- [ ] Instant + Manual delivery via providers  
+- [ ] Admin order approve/reject/fulfill + timeline  
+- [ ] Auto-deliver optional with review/reverse  
+- [ ] Customer token + portal + Telegram login/TMA  
+- [ ] Per-workspace Telegram bot notifications + broadcast  
+- [ ] Customer list entitlement counts match detail  
+- [ ] Track page  
+- [ ] Analytics for completed revenue  
+- [ ] OpenAPI for public + workspace APIs  
+- [ ] No dependency on any external panel product  
 
 ---
 
-## 11. Admin UI inventory
+## 12. Explicit non-goals for NeoStore repo
 
-| Top tab | Sub-tabs | Content |
-|---------|----------|---------|
-| Overview | Summary, Analytics | KPIs + recent orders; charts |
-| Commerce | Orders, Products, Categories, Blueprints | CRUD + order actions |
-| Customers | Directory, Broadcast | Segments, search, detail drawer, Telegram broadcast |
-| Settings | Profile, Payments, Cards, Telegram | Store meta, methods, cards, bot |
-
-### Public routes
-
-| Route | Role |
-|-------|------|
-| `/shop/[slug]` | Checkout wizard |
-| `/shop/[slug]/portal` | Login |
-| `/shop/[slug]/portal/dashboard` | Portal |
-| `/portal`, `/portal/dashboard` | Global portal (remembered slug) |
-| `/portal/[token]` | Deep link |
-| `/track/[code]` | Public tracker |
-
-TMA uses the same responsive UI + silent Telegram login — not a second storefront.
+- Do **not** couple to or import from other commercial panel codebases  
+- Do **not** hardcode a single vendor control plane as fulfillment  
+- VPN/VPS/etc. are **product types / plugins**, not the platform core  
 
 ---
 
-## 12. User journeys
-
-### Admin
-
-1. Install NeoStore → create operator → create store profile (slug, currency, cards)
-2. Categories → Fulfillment blueprints → Products
-3. Optional: Telegram bot activate, custom domain, auto-deliver
-4. Review orders → approve/reject/fulfill; or confirm auto-delivered
-5. Customers → inspect entitlements, broadcast, analytics
-
-### Customer (web)
-
-1. Open shop → choose product → enter label/contact → pay → upload receipt → tracking + permanent token  
-2. Login portal with token → entitlements/orders/alerts  
-3. Renew / claim / hide / cancel pending  
-
-### Customer (Telegram)
-
-1. `/start` → welcome + entitlements + Open Mini App + token message  
-2. Mini App → session → portal  
-
-### Telegram admin
-
-| Input | Behavior |
-|-------|----------|
-| `/start` (admin) | Admin home |
-| `/admin`, `/setadmin` | Bind admin chat |
-| `approve:{orderId}` / `reject:{orderId}` | Order actions |
-| `admin:orders\|revenue\|broadcast` | Menus |
-| `broadcast:aud:{all\|with_service\|without_service}` | Audience |
-| `broadcast:confirm\|cancel` | Send/cancel |
-
-Hourly alerts: expiry ≤ 1 day; remaining quota ≤ threshold; cooldown ~20h per key in metadata.
-
-### Notification types
-
-`order_submitted`, `renewal_submitted`, `order_approved`, `payment_rejected`, `subscription_updated` / ready, `provisioning_issue`, `order_cancelled`, `expiry_warning`, `quota_warning`
-
----
-
-## 13. Analytics
-
-- Ranges: `7d` | `30d` | `90d` | `365d`
-- Group: `day` | `week` | `month`
-- Optional `categoryId`
-- Series: revenue, orders, renewals (ACTIVE/RENEWED only)
-
----
-
-## 14. Security & ops
-
-- Encrypt Telegram bot tokens at rest
-- Hash customer session tokens (store only hash)
-- Validate Telegram `initData` HMAC for TMA login
-- Webhook path includes unguessable `secret`
-- Rate-limit all public mutating endpoints
-- Independent installer: Node 20+, Postgres (or SQLite for small installs), env file, migrate, systemd/docker optional
-- Update script: pull release / migrate / restart — **separate from any other product**
-
----
-
-## 15. Implementation phases
-
-| Phase | Deliverable |
-|-------|-------------|
-| 0 | Repo + SPEC + monorepo stubs (**this**) |
-| 1 | Operator auth, Store profile, Categories, Products, Blueprints |
-| 2 | Checkout, payments, order machine, admin review UI |
-| 3 | Providers: Manual + EntitlementCode; reverse/auto-deliver |
-| 4 | Customer portal + sessions |
-| 5 | Telegram bot + Mini App + broadcast + alerts |
-| 6 | Analytics, custom domain hooks, polish install/update |
-
----
-
-## 16. Acceptance checklist (parity with intended store UX)
-
-- [ ] Public shop by slug with categories & products  
-- [ ] Manual bank cards + receipt upload  
-- [ ] Admin approve → entitlement created via blueprint  
-- [ ] Auto-deliver + pending review confirm/reject with reverse  
-- [ ] Customer permanent token + portal dashboard  
-- [ ] Renew with category gate + receipt  
-- [ ] Claim by AccessLink; hide entitlement  
-- [ ] Public tracking page  
-- [ ] Telegram Mini App silent login  
-- [ ] Admin bot approve/reject + broadcast audiences  
-- [ ] Customer directory shows correct entitlement counts (list = detail)  
-- [ ] Analytics for ACTIVE/RENEWED revenue  
-- [ ] Standalone install & update without other products  
-
----
-
-## 17. Naming defaults for NeoStore
-
-| Item | Default |
-|------|---------|
-| Product | NeoStore |
-| Permanent token prefix | `NS-` |
-| Default timezone display | `Asia/Tehran` (configurable) |
-| Session TTL | 14 days |
-| Auto-deliver delay | operator-configured minutes |
-| Currencies | USD, IRT (Toman display) |
-
----
-
-*End of specification.*
+*This SPEC is the only product authority for NeoStore engineering.*
