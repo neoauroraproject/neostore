@@ -2,15 +2,19 @@
   "name": "neostore",
   "version": "0.1.0",
   "private": true,
-  "description": "NeoStore — standalone digital storefront platform",
+  "description": "NeoStore — self-hosted marketplace platform",
   "workspaces": [
     "apps/*",
     "packages/*"
   ],
   "scripts": {
-    "dev": "echo \"Wire apps after Phase 1 scaffold\"",
-    "build": "echo \"Wire apps after Phase 1 scaffold\"",
-    "lint": "echo \"Wire apps after Phase 1 scaffold\""
+    "dev:api": "npm run dev --workspace=@neostore/api",
+    "build:api": "npm run build --workspace=@neostore/api",
+    "prisma:generate": "npm run prisma:generate --workspace=@neostore/api",
+    "prisma:push": "npm exec --workspace=@neostore/api -- prisma db push --schema=prisma/schema.prisma",
+    "seed": "npm run seed --workspace=@neostore/api",
+    "docker:up": "docker compose up -d postgres redis",
+    "install:stack": "bash install/install.sh"
   },
   "engines": {
     "node": ">=20"

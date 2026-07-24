@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: neostore
+      POSTGRES_PASSWORD: neostore
+      POSTGRES_DB: neostore
+    ports:
+      - "55432:5432"
+    volumes:
+      - neostore_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U neostore"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    env_file: .env.example
+    environment:
+      DATABASE_URL: postgresql://neostore:neostore@postgres:5432/neostore
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: change-me-in-production
+      PUBLIC_BASE_URL: http://localhost:4100
+      PORT: "4100"
+    ports:
+      - "4100:4100"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+volumes:
+  neostore_pg:

@@ -11,3 +11,5 @@ build/
 coverage/
 tmp/
 *.tar.gz
+*.tsbuildinfo
+.data/
