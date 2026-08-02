@@ -26,6 +26,9 @@ export type PublicStore = {
   description?: string | null;
   defaultCurrency?: string;
   paymentConfig?: unknown;
+  homepageConfig?: unknown;
+  branding?: unknown;
+  workspaceId?: string;
 };
 
 export type PublicProduct = {
@@ -36,13 +39,14 @@ export type PublicProduct = {
   priceUsd: number | string;
   priceToman?: number | string | null;
   featured?: boolean;
+  imageUrl?: string | null;
   categoryId?: string | null;
   category?: { id: string; name: string } | null;
 };
 
 export type PublicCatalog = {
   store: PublicStore;
-  categories: { id: string; name: string; description?: string | null }[];
+  categories: { id: string; name: string; description?: string | null; icon?: string | null }[];
   products: PublicProduct[];
 };
 

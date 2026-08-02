@@ -3,8 +3,15 @@ import { fetchCatalog } from '@/lib/catalog';
 
 export const dynamic = 'force-dynamic';
 
-export default async function SlugSearchPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function SlugSearchPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ slug: string }>;
+  searchParams?: Promise<{ q?: string }>;
+}) {
   const { slug } = await params;
   const catalog = await fetchCatalog(slug);
-  return <SearchView catalog={catalog} isPrimary={false} />;
+  const sp = searchParams ? await searchParams : {};
+  return <SearchView catalog={catalog} isPrimary={false} initialQuery={sp.q || ''} />;
 }

@@ -20,7 +20,18 @@ export default function PlatformHome() {
         }
       />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
-        {['Sellers', 'Wallets', 'Payments', 'Telegram', 'Email', 'Website', 'System'].map((m) => (
+        <Card>
+          <strong>Website / Homepage</strong>
+          <p style={{ margin: '8px 0 12px', color: 'var(--ns-muted)', fontSize: 13 }}>
+            Edit the primary shop homepage via Seller → Homepage designer for that workspace.
+          </p>
+          <Link href="/">
+            <Button size="sm" variant="secondary">
+              Open workspaces
+            </Button>
+          </Link>
+        </Card>
+        {['Sellers', 'Wallets', 'Payments', 'Telegram', 'Email', 'System'].map((m) => (
           <Card key={m}>
             <strong>{m}</strong>
             <p style={{ margin: '8px 0 0', color: 'var(--ns-muted)', fontSize: 13 }}>Designed — not implemented yet</p>

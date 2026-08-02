@@ -41,9 +41,16 @@ export default function SellerDashboardPage() {
         title="Dashboard"
         description="Live workspace totals from the API."
         actions={
-          <Link href={`/w/${workspaceId}/products/new`}>
-            <Button size="sm">New product</Button>
-          </Link>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            <Link href={`/w/${workspaceId}/homepage`}>
+              <Button size="sm" variant="secondary">
+                Homepage
+              </Button>
+            </Link>
+            <Link href={`/w/${workspaceId}/products/new`}>
+              <Button size="sm">New product</Button>
+            </Link>
+          </div>
         }
       />
       {loading ? (

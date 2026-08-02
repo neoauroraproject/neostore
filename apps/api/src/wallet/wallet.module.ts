@@ -89,6 +89,29 @@ export class WalletService {
     return this.balance(customerId, currency);
   }
 
+  async refund(
+    customerId: string,
+    amount: number,
+    currency = 'USD',
+    ref?: { refType: string; refId: string; meta?: object },
+  ) {
+    if (amount <= 0) throw new BadRequestException('amount must be positive');
+    const account = await this.getOrCreateCustomerAccount(customerId, currency);
+    const entry = await this.prisma.ledgerEntry.create({
+      data: {
+        accountId: account.id,
+        type: LedgerEntryType.Refund,
+        amount: Math.abs(amount),
+        currency,
+        refType: ref?.refType,
+        refId: ref?.refId,
+        meta: ref?.meta || {},
+      },
+    });
+    await this.events.emit('WalletRefunded', { customerId, amount, currency, entryId: entry.id });
+    return this.balance(customerId, currency);
+  }
+
   async ledger(customerId: string) {
     const account = await this.getOrCreateCustomerAccount(customerId);
     const entries = await this.prisma.ledgerEntry.findMany({

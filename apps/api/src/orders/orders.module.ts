@@ -6,6 +6,8 @@ import {
   Injectable,
   Module,
   NotFoundException,
+  OnModuleDestroy,
+  OnModuleInit,
   Param,
   Post,
   Query,
@@ -13,13 +15,14 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
-import { PlatformOrderStatus, PaymentStatus, Prisma } from '@prisma/client';
+import { PlatformOrderStatus, PaymentStatus, Prisma, DeliveryMode } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExtensionHost } from '../extensions/extension-host';
 import { EventBus } from '../extensions/event-bus';
 import { HookBus } from '../extensions/hook-bus';
 import { WorkspaceGuardService } from '../catalog/catalog.module';
 import { newRawToken } from '../auth/auth.module';
+import { WalletService } from '../wallet/wallet.module';
 
 @Injectable()
 export class OrdersService {
@@ -29,6 +32,7 @@ export class OrdersService {
     private readonly events: EventBus,
     private readonly hooks: HookBus,
     private readonly access: WorkspaceGuardService,
+    private readonly wallet: WalletService,
   ) {}
 
   private async nextTracking(storeId: string) {
@@ -71,6 +75,18 @@ export class OrdersService {
       include: { blueprint: true },
     });
     if (!product) throw new NotFoundException('Product not found');
+
+    if (product.deliveryMode === DeliveryMode.instant) {
+      const cfg = (product.blueprint.providerConfig || {}) as { poolId?: string };
+      if (product.blueprint.providerType === 'neostore.delivery.entitlement_code' && cfg.poolId) {
+        const remaining = await this.prisma.inventoryItem.count({
+          where: { poolId: cfg.poolId, used: false },
+        });
+        if (remaining <= 0) throw new BadRequestException('Out of stock');
+      } else if (!product.stockUnlimited && product.stockCount <= 0) {
+        throw new BadRequestException('Out of stock');
+      }
+    }
 
     const currency = String(body.currency || store.defaultCurrency || 'USD');
     const amount = currency === 'IRT' ? Number(product.priceToman || product.priceUsd) : Number(product.priceUsd);
@@ -276,6 +292,28 @@ export class OrdersService {
     });
     await this.events.emit('PaymentCompleted', { orderId: id, workspaceId });
     await this.hooks.run('afterPayment', { orderId: id });
+
+    const product = order.product;
+    if (product.deliveryMode === DeliveryMode.manual) {
+      const store = await this.prisma.storeProfile.findUnique({ where: { workspaceId } });
+      const minutes =
+        product.deliverWithinMinutes ?? store?.manualDeliverSlaMinutes ?? 60;
+      const deliverByAt = new Date(Date.now() + Math.max(1, minutes) * 60_000);
+      await this.prisma.order.update({
+        where: { id },
+        data: { status: PlatformOrderStatus.Processing, deliverByAt },
+      });
+      await this.prisma.orderTimelineEvent.create({
+        data: {
+          orderId: id,
+          status: 'Processing',
+          message: `Awaiting seller delivery (SLA ${minutes}m)`,
+          actor: 'system',
+        },
+      });
+      return this.get(userId, workspaceId, id);
+    }
+
     return this.fulfill(userId, workspaceId, id);
   }
 
@@ -352,6 +390,13 @@ export class OrdersService {
         data: { used: true, usedAt: new Date(), orderId: id },
       });
       providerConfig.reservedCode = item.code;
+      const remaining = await this.prisma.inventoryItem.count({
+        where: { poolId: String(providerConfig.poolId), used: false },
+      });
+      await this.prisma.product.update({
+        where: { id: order.productId },
+        data: { stockCount: remaining, stockUnlimited: false },
+      });
     }
 
     await this.hooks.run('beforeFulfillment', { orderId: id });
@@ -408,6 +453,7 @@ export class OrdersService {
           status: finalStatus,
           entitlementId: entitlement.id,
           provisionError: null,
+          deliverByAt: null,
         },
       });
       await this.prisma.orderTimelineEvent.create({
@@ -450,13 +496,7 @@ export class OrdersService {
         data: { status: PaymentStatus.APPROVED, providerRef: verified.ref || null, reviewedAt: new Date() },
       });
     }
-    await this.prisma.order.update({
-      where: { id: orderId },
-      data: { status: PlatformOrderStatus.Paid },
-    });
-    await this.events.emit('PaymentCompleted', { orderId, workspaceId: order.workspaceId });
-    // system fulfill
-    return this.fulfill('system', order.workspaceId, orderId);
+    return this.approve('system', order.workspaceId, orderId);
   }
 
   async processAutoDeliverDue() {
@@ -487,6 +527,68 @@ export class OrdersService {
       }
     }
     return results;
+  }
+
+  /** Refund overdue manual deliveries to customer wallet balance. */
+  async processSlaRefundDue() {
+    const due = await this.prisma.order.findMany({
+      where: {
+        deliverByAt: { lte: new Date() },
+        status: PlatformOrderStatus.Processing,
+        entitlementId: null,
+      },
+      take: 50,
+    });
+    const results = [];
+    for (const order of due) {
+      try {
+        await this.wallet.refund(order.customerId, order.amount, order.currency, {
+          refType: 'order',
+          refId: order.id,
+          meta: { reason: 'sla_timeout', trackingCode: order.trackingCode },
+        });
+        await this.prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: PlatformOrderStatus.Refunded,
+            rejectReason: 'Auto-refund: delivery SLA exceeded',
+            deliverByAt: null,
+          },
+        });
+        await this.prisma.orderTimelineEvent.create({
+          data: {
+            orderId: order.id,
+            status: 'Refunded',
+            message: 'Auto-refunded to customer wallet (delivery SLA exceeded)',
+            actor: 'system:sla-refund',
+          },
+        });
+        results.push({ id: order.id, ok: true });
+      } catch (e: any) {
+        results.push({ id: order.id, ok: false, error: String(e?.message || e) });
+      }
+    }
+    return results;
+  }
+}
+
+@Injectable()
+export class OrdersCronService implements OnModuleInit, OnModuleDestroy {
+  private timer?: ReturnType<typeof setInterval>;
+
+  constructor(private readonly orders: OrdersService) {}
+
+  onModuleInit() {
+    if (process.env.CRON_DISABLED === '1') return;
+    const ms = Number(process.env.CRON_INTERVAL_MS || 60_000);
+    this.timer = setInterval(() => {
+      void this.orders.processAutoDeliverDue().catch(() => null);
+      void this.orders.processSlaRefundDue().catch(() => null);
+    }, Math.max(15_000, ms));
+  }
+
+  onModuleDestroy() {
+    if (this.timer) clearInterval(this.timer);
   }
 }
 
@@ -575,13 +677,29 @@ export class OrdersAdminController {
   autoDeliver() {
     return this.orders.processAutoDeliverDue();
   }
+
+  @Post('cron/sla-refund')
+  slaRefund() {
+    return this.orders.processSlaRefundDue();
+  }
+
+  /** Combined tick for operators / external cron. */
+  @Post('cron/tick')
+  async tick() {
+    const [autoDeliver, slaRefund] = await Promise.all([
+      this.orders.processAutoDeliverDue(),
+      this.orders.processSlaRefundDue(),
+    ]);
+    return { autoDeliver, slaRefund };
+  }
 }
 
 import { CatalogModule } from '../catalog/catalog.module';
+import { WalletModule } from '../wallet/wallet.module';
 
 @Module({
-  imports: [CatalogModule],
-  providers: [OrdersService],
+  imports: [CatalogModule, WalletModule],
+  providers: [OrdersService, OrdersCronService],
   controllers: [
     CheckoutController,
     TrackController,

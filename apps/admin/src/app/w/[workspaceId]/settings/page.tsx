@@ -2,6 +2,7 @@
 
 import type { FormEvent } from 'react';
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Button, Card, Input, PageHeader, Skeleton } from '@neostore/ui';
 import { SellerShell, useSellerSession } from '../../../../components/SellerShell';
@@ -117,7 +118,18 @@ export default function SettingsPage() {
 
   return (
     <SellerShell workspaceId={workspaceId}>
-      <PageHeader eyebrow="Workspace" title="Settings" description="Store profile and Telegram bot configuration." />
+      <PageHeader
+        eyebrow="Workspace"
+        title="Settings"
+        description="Store profile and Telegram bot configuration."
+        actions={
+          <Link href={`/w/${workspaceId}/homepage`}>
+            <Button size="sm" variant="secondary">
+              Homepage designer
+            </Button>
+          </Link>
+        }
+      />
       {loading ? <Skeleton height={220} radius={16} /> : null}
       {!loading ? (
         <div style={{ display: 'grid', gap: 16, maxWidth: 680 }}>

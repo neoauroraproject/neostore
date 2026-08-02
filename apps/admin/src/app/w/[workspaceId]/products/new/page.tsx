@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, Card, EmptyState, Input, PageHeader } from '@neostore/ui';
 import { SellerShell, useSellerSession } from '../../../../../components/SellerShell';
-import { api, workspacePath } from '../../../../../lib/api';
+import { API, api, workspacePath } from '../../../../../lib/api';
 
 const fieldLabel: React.CSSProperties = { display: 'grid', gap: 6, fontSize: 13, fontWeight: 600 };
 const selectStyle: React.CSSProperties = {
@@ -24,8 +24,10 @@ export default function NewProductPage() {
   const router = useRouter();
   const [categories, setCategories] = useState<any[]>([]);
   const [blueprints, setBlueprints] = useState<any[]>([]);
+  const [pools, setPools] = useState<any[]>([]);
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [form, setForm] = useState({
     name: '',
     description: '',
@@ -33,8 +35,11 @@ export default function NewProductPage() {
     categoryId: '',
     blueprintId: '',
     deliveryMode: 'manual',
+    poolId: '',
     priceUsd: '',
     priceToman: '',
+    deliverWithinMinutes: '60',
+    imageUrl: '',
     featured: false,
     visible: true,
   });
@@ -44,8 +49,9 @@ export default function NewProductPage() {
     Promise.all([
       api<any[]>(workspacePath(workspaceId, '/categories'), { token: session.token }),
       api<any[]>(workspacePath(workspaceId, '/blueprints'), { token: session.token }),
+      api<any[]>(workspacePath(workspaceId, '/inventory/pools'), { token: session.token }).catch(() => []),
     ])
-      .then(async ([cats, bps]) => {
+      .then(async ([cats, bps, poolList]) => {
         let nextBps = bps || [];
         if (!nextBps.length) {
           const b = await api<any>(workspacePath(workspaceId, '/blueprints'), {
@@ -57,14 +63,70 @@ export default function NewProductPage() {
         }
         setCategories(cats || []);
         setBlueprints(nextBps);
+        setPools(poolList || []);
         setForm((f) => ({
           ...f,
           categoryId: cats?.[0]?.id || '',
-          blueprintId: nextBps[0]?.id || '',
+          blueprintId: nextBps.find((b: any) => b.providerType === 'neostore.delivery.manual')?.id || nextBps[0]?.id || '',
+          poolId: poolList?.[0]?.id || '',
         }));
       })
       .catch((e) => setError(e.message));
   }, [session?.token, workspaceId]);
+
+  async function uploadImage(file: File) {
+    if (!session?.token) return;
+    setUploading(true);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API}${workspacePath(workspaceId, '/media')}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Upload failed');
+      setForm((f) => ({ ...f, imageUrl: data.url }));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function resolveBlueprintId(): Promise<string> {
+    if (!session?.token) throw new Error('Not signed in');
+    if (form.deliveryMode === 'manual') {
+      const manual =
+        blueprints.find((b) => b.providerType === 'neostore.delivery.manual') ||
+        (await api<any>(workspacePath(workspaceId, '/blueprints'), {
+          method: 'POST',
+          token: session.token,
+          body: JSON.stringify({ name: 'Manual Delivery', providerType: 'neostore.delivery.manual' }),
+        }));
+      return manual.id;
+    }
+    if (!form.poolId) throw new Error('Select a voucher pool for instant delivery');
+    const existing = blueprints.find((b) => {
+      if (b.providerType !== 'neostore.delivery.entitlement_code') return false;
+      const cfg = b.providerConfig || {};
+      return cfg.poolId === form.poolId;
+    });
+    if (existing) return existing.id;
+    const pool = pools.find((p) => p.id === form.poolId);
+    const created = await api<any>(workspacePath(workspaceId, '/blueprints'), {
+      method: 'POST',
+      token: session.token,
+      body: JSON.stringify({
+        name: `Pool: ${pool?.name || 'codes'}`,
+        providerType: 'neostore.delivery.entitlement_code',
+        providerConfig: { poolId: form.poolId },
+      }),
+    });
+    return created.id;
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -73,13 +135,10 @@ export default function NewProductPage() {
       setError('Create a category first, then select it.');
       return;
     }
-    if (!form.blueprintId) {
-      setError('Delivery blueprint missing.');
-      return;
-    }
     setSaving(true);
     setError('');
     try {
+      const blueprintId = await resolveBlueprintId();
       await api(workspacePath(workspaceId, '/products'), {
         method: 'POST',
         token: session.token,
@@ -88,13 +147,16 @@ export default function NewProductPage() {
           description: form.description,
           type: form.type,
           categoryId: form.categoryId,
-          blueprintId: form.blueprintId,
+          blueprintId,
           deliveryMode: form.deliveryMode,
           priceUsd: Number(form.priceUsd || 0),
           priceToman: form.priceToman ? Number(form.priceToman) : null,
           featured: form.featured,
           visible: form.visible,
-          stockUnlimited: true,
+          imageUrl: form.imageUrl || null,
+          deliverWithinMinutes:
+            form.deliveryMode === 'manual' ? Number(form.deliverWithinMinutes || 60) : null,
+          stockUnlimited: form.deliveryMode !== 'instant',
         }),
       });
       router.push(`/w/${workspaceId}/products`);
@@ -140,6 +202,22 @@ export default function NewProductPage() {
               Description
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </label>
+            <label style={fieldLabel}>
+              Image
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void uploadImage(f);
+                }}
+              />
+              {uploading ? <span style={{ color: 'var(--ns-muted)' }}>Uploading…</span> : null}
+              {form.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.imageUrl} alt="" style={{ width: 120, height: 80, objectFit: 'cover', borderRadius: 10 }} />
+              ) : null}
+            </label>
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
               <label style={fieldLabel}>
                 Type
@@ -158,43 +236,59 @@ export default function NewProductPage() {
                   value={form.deliveryMode}
                   onChange={(e) => setForm({ ...form, deliveryMode: e.target.value })}
                 >
-                  <option value="manual">manual</option>
-                  <option value="instant">instant</option>
+                  <option value="manual">Delayed (manual)</option>
+                  <option value="instant">Instant (voucher pool)</option>
                 </select>
               </label>
             </div>
-            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
+            {form.deliveryMode === 'instant' ? (
               <label style={fieldLabel}>
-                Category
-                <select
-                  required
-                  style={selectStyle}
-                  value={form.categoryId}
-                  onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
-                >
-                  {categories.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
+                Voucher pool
+                {pools.length === 0 ? (
+                  <p style={{ margin: 0, color: 'var(--ns-danger)', fontWeight: 500 }}>
+                    No pools — <Link href={`/w/${workspaceId}/inventory`}>create one</Link> first.
+                  </p>
+                ) : (
+                  <select
+                    required
+                    style={selectStyle}
+                    value={form.poolId}
+                    onChange={(e) => setForm({ ...form, poolId: e.target.value })}
+                  >
+                    {pools.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.remaining} left)
+                      </option>
+                    ))}
+                  </select>
+                )}
               </label>
+            ) : (
               <label style={fieldLabel}>
-                Blueprint
-                <select
-                  required
-                  style={selectStyle}
-                  value={form.blueprintId}
-                  onChange={(e) => setForm({ ...form, blueprintId: e.target.value })}
-                >
-                  {blueprints.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
+                Deliver within (minutes)
+                <Input
+                  type="number"
+                  min={1}
+                  value={form.deliverWithinMinutes}
+                  onChange={(e) => setForm({ ...form, deliverWithinMinutes: e.target.value })}
+                />
               </label>
-            </div>
+            )}
+            <label style={fieldLabel}>
+              Category
+              <select
+                required
+                style={selectStyle}
+                value={form.categoryId}
+                onChange={(e) => setForm({ ...form, categoryId: e.target.value })}
+              >
+                {categories.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </label>
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
               <label style={fieldLabel}>
                 Price USD
@@ -214,7 +308,7 @@ export default function NewProductPage() {
               Visible in store
             </label>
             {error ? <p style={{ color: 'var(--ns-danger)', margin: 0 }}>{error}</p> : null}
-            <Button type="submit" disabled={saving}>
+            <Button type="submit" disabled={saving || (form.deliveryMode === 'instant' && !form.poolId)}>
               {saving ? 'Saving…' : 'Create product'}
             </Button>
           </form>

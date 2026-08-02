@@ -6,7 +6,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { Button, Card, Input, PageHeader, Skeleton } from '@neostore/ui';
 import { SellerShell, useSellerSession } from '../../../../../components/SellerShell';
-import { api, workspacePath } from '../../../../../lib/api';
+import { API, api, workspacePath } from '../../../../../lib/api';
 
 const fieldLabel: React.CSSProperties = { display: 'grid', gap: 6, fontSize: 13, fontWeight: 600 };
 
@@ -17,6 +17,7 @@ export default function EditProductPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({
     name: '',
@@ -26,6 +27,8 @@ export default function EditProductPage() {
     visible: true,
     featured: false,
     status: 'active',
+    imageUrl: '',
+    deliverWithinMinutes: '',
   });
 
   useEffect(() => {
@@ -42,11 +45,35 @@ export default function EditProductPage() {
           visible: Boolean(p.visible),
           featured: Boolean(p.featured),
           status: p.status || 'active',
+          imageUrl: p.imageUrl || '',
+          deliverWithinMinutes: p.deliverWithinMinutes != null ? String(p.deliverWithinMinutes) : '',
         });
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
   }, [session?.token, workspaceId, id]);
+
+  async function uploadImage(file: File) {
+    if (!session?.token) return;
+    setUploading(true);
+    setError('');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API}${workspacePath(workspaceId, '/media')}`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${session.token}` },
+        body: fd,
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.message || 'Upload failed');
+      setForm((f) => ({ ...f, imageUrl: data.url }));
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setUploading(false);
+    }
+  }
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -65,6 +92,8 @@ export default function EditProductPage() {
           visible: form.visible,
           featured: form.featured,
           status: form.status,
+          imageUrl: form.imageUrl || null,
+          deliverWithinMinutes: form.deliverWithinMinutes ? Number(form.deliverWithinMinutes) : null,
         }),
       });
       router.push(`/w/${workspaceId}/products`);
@@ -100,6 +129,22 @@ export default function EditProductPage() {
               Description
               <Input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </label>
+            <label style={fieldLabel}>
+              Image
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void uploadImage(f);
+                }}
+              />
+              {uploading ? <span style={{ color: 'var(--ns-muted)' }}>Uploading…</span> : null}
+              {form.imageUrl ? (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={form.imageUrl} alt="" style={{ width: 120, height: 80, objectFit: 'cover', borderRadius: 10 }} />
+              ) : null}
+            </label>
             <div style={{ display: 'grid', gap: 12, gridTemplateColumns: '1fr 1fr' }}>
               <label style={fieldLabel}>
                 Price USD
@@ -110,6 +155,15 @@ export default function EditProductPage() {
                 <Input value={form.priceToman} onChange={(e) => setForm({ ...form, priceToman: e.target.value })} />
               </label>
             </div>
+            <label style={fieldLabel}>
+              Deliver within (minutes)
+              <Input
+                type="number"
+                value={form.deliverWithinMinutes}
+                onChange={(e) => setForm({ ...form, deliverWithinMinutes: e.target.value })}
+                placeholder="Store default if empty"
+              />
+            </label>
             <label style={fieldLabel}>
               Status
               <select

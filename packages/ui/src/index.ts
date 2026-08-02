@@ -6,6 +6,8 @@ export { Badge } from './Badge';
 export { Skeleton } from './Skeleton';
 export { Icon } from './Icon';
 export type { IconName } from './Icon';
+export { CatalogIcon, CATALOG_ICON_NAMES, isCatalogIconName } from './CatalogIcon';
+export type { CatalogIconName } from './CatalogIcon';
 export { EmptyState, PageHeader } from './EmptyState';
 export { BottomNav, StoreShell } from './Shell';
 export type { BottomNavItem } from './Shell';

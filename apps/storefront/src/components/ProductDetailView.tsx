@@ -34,16 +34,19 @@ export function ProductDetailView({
               borderRadius: 'var(--ns-radius-xl)',
               background:
                 'linear-gradient(145deg, var(--ns-surface-sunken) 0%, #dce8e6 50%, var(--ns-accent-soft) 100%)',
+              backgroundImage: product.imageUrl ? `url(${product.imageUrl})` : undefined,
+              backgroundSize: 'cover',
+              backgroundPosition: 'center',
               display: 'grid',
               placeItems: 'center',
               fontFamily: 'var(--ns-font-display)',
               fontSize: 72,
               fontWeight: 700,
               color: 'var(--ns-accent-ink)',
-              opacity: 0.4,
+              opacity: product.imageUrl ? 1 : 0.4,
             }}
           >
-            {product.type?.slice(0, 1) || 'P'}
+            {!product.imageUrl ? product.type?.slice(0, 1) || 'P' : null}
           </div>
           <div>
             <PageHeader

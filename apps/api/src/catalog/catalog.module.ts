@@ -86,6 +86,10 @@ export class CatalogService {
         telegramBotEnabled: data.telegramBotEnabled as boolean | undefined,
         telegramWelcomeText: data.telegramWelcomeText as string | undefined,
         telegramAdminChatId: data.telegramAdminChatId as string | undefined,
+        homepageConfig: data.homepageConfig as object | undefined,
+        branding: data.branding as object | undefined,
+        manualDeliverSlaMinutes:
+          data.manualDeliverSlaMinutes != null ? Number(data.manualDeliverSlaMinutes) : undefined,
       },
     });
   }
@@ -98,11 +102,20 @@ export class CatalogService {
     });
   }
 
-  async createCategory(userId: string, workspaceId: string, body: { name: string; description?: string }) {
+  async createCategory(
+    userId: string,
+    workspaceId: string,
+    body: { name: string; description?: string; icon?: string },
+  ) {
     await this.access.requireMember(userId, workspaceId);
     if (!body.name?.trim()) throw new BadRequestException('name required');
     return this.prisma.category.create({
-      data: { workspaceId, name: body.name.trim(), description: body.description },
+      data: {
+        workspaceId,
+        name: body.name.trim(),
+        description: body.description,
+        icon: body.icon || null,
+      },
     });
   }
 
@@ -113,6 +126,7 @@ export class CatalogService {
       data: {
         name: body.name as string | undefined,
         description: body.description as string | undefined,
+        icon: body.icon !== undefined ? ((body.icon as string) || null) : undefined,
         sortOrder: body.sortOrder as number | undefined,
         visible: body.visible as boolean | undefined,
         enabled: body.enabled as boolean | undefined,
@@ -171,6 +185,28 @@ export class CatalogService {
       typeExt.validateFields?.((body.typeFields as Record<string, unknown>) || {}) || { ok: true };
     if (!validation.ok) throw new BadRequestException(validation.errors?.join(', ') || 'Invalid fields');
 
+    const deliveryMode = (body.deliveryMode as DeliveryMode) || DeliveryMode.instant;
+    const blueprint = await this.prisma.fulfillmentBlueprint.findFirst({
+      where: { id: String(body.blueprintId), workspaceId },
+    });
+    if (!blueprint) throw new BadRequestException('blueprint not found');
+
+    let stockUnlimited = body.stockUnlimited !== false;
+    let stockCount = Number(body.stockCount || 0);
+    if (deliveryMode === DeliveryMode.instant) {
+      if (blueprint.providerType !== 'neostore.delivery.entitlement_code') {
+        throw new BadRequestException('Instant delivery requires entitlement_code blueprint');
+      }
+      const cfg = (blueprint.providerConfig || {}) as { poolId?: string };
+      if (!cfg.poolId) {
+        throw new BadRequestException('Instant delivery requires blueprint providerConfig.poolId');
+      }
+      stockUnlimited = false;
+      stockCount = await this.prisma.inventoryItem.count({
+        where: { poolId: cfg.poolId, used: false },
+      });
+    }
+
     const product = await this.prisma.product.create({
       data: {
         workspaceId,
@@ -179,7 +215,7 @@ export class CatalogService {
         name: String(body.name),
         description: (body.description as string) || null,
         type,
-        deliveryMode: (body.deliveryMode as DeliveryMode) || DeliveryMode.instant,
+        deliveryMode,
         priceUsd: Number(body.priceUsd || 0),
         priceToman: body.priceToman != null ? Number(body.priceToman) : null,
         quotaUnits: BigInt(Number(body.quotaUnits || 0)),
@@ -188,8 +224,11 @@ export class CatalogService {
         featured: Boolean(body.featured),
         visible: body.visible !== false,
         renewable: body.renewable !== false,
-        stockUnlimited: body.stockUnlimited !== false,
-        stockCount: Number(body.stockCount || 0),
+        stockUnlimited,
+        stockCount,
+        imageUrl: (body.imageUrl as string) || null,
+        deliverWithinMinutes:
+          body.deliverWithinMinutes != null ? Number(body.deliverWithinMinutes) : null,
         typeFields: (body.typeFields as object) || {},
       },
     });
@@ -211,6 +250,12 @@ export class CatalogService {
         status: body.status as string | undefined,
         stockCount: body.stockCount != null ? Number(body.stockCount) : undefined,
         stockUnlimited: body.stockUnlimited as boolean | undefined,
+        imageUrl: body.imageUrl !== undefined ? ((body.imageUrl as string) || null) : undefined,
+        deliveryMode: body.deliveryMode as DeliveryMode | undefined,
+        deliverWithinMinutes:
+          body.deliverWithinMinutes != null ? Number(body.deliverWithinMinutes) : undefined,
+        blueprintId: body.blueprintId != null ? String(body.blueprintId) : undefined,
+        categoryId: body.categoryId != null ? String(body.categoryId) : undefined,
       },
     });
     await this.events.emit('ProductUpdated', { productId: id, workspaceId, action: 'update' });
@@ -248,6 +293,9 @@ export class CatalogService {
     description: string | null;
     defaultCurrency: string;
     paymentConfig: unknown;
+    homepageConfig?: unknown;
+    branding?: unknown;
+    manualDeliverSlaMinutes?: number;
   }) {
     const [categories, products] = await Promise.all([
       this.prisma.category.findMany({
@@ -267,6 +315,10 @@ export class CatalogService {
         description: store.description,
         defaultCurrency: store.defaultCurrency,
         paymentConfig: store.paymentConfig,
+        homepageConfig: store.homepageConfig ?? {},
+        branding: store.branding ?? {},
+        manualDeliverSlaMinutes: store.manualDeliverSlaMinutes ?? 60,
+        workspaceId: store.workspaceId,
       },
       categories,
       products: products.map((p) => ({
@@ -312,7 +364,7 @@ export class CatalogAdminController {
   createCategory(
     @Req() req: { user: { id: string } },
     @Param('workspaceId') workspaceId: string,
-    @Body() body: { name: string; description?: string },
+    @Body() body: { name: string; description?: string; icon?: string },
   ) {
     return this.catalog.createCategory(req.user.id, workspaceId, body);
   }

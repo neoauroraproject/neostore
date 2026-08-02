@@ -127,6 +127,9 @@ model StoreProfile {
   telegramWebhookSecret    String?
   telegramWelcomeText      String?
   telegramAdminChatId      String?
+  homepageConfig           Json     @default("{}")
+  branding                 Json     @default("{}")
+  manualDeliverSlaMinutes  Int      @default(60)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
   workspace                Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -183,6 +186,8 @@ model Product {
   renewable     Boolean      @default(true)
   stockUnlimited Boolean     @default(true)
   stockCount    Int          @default(0)
+  imageUrl      String?
+  deliverWithinMinutes Int?
   typeFields    Json         @default("{}")
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -260,6 +265,7 @@ model Order {
   autoDeliverAt        DateTime?
   autoDelivered        Boolean             @default(false)
   pendingReview       Boolean             @default(false)
+  deliverByAt         DateTime?
   renewSnapshot       Json?
   createdAt           DateTime            @default(now())
   updatedAt           DateTime            @updatedAt

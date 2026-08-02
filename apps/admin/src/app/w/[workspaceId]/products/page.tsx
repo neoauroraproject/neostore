@@ -51,6 +51,11 @@ export default function ProductsPage() {
         description="Create and manage sellable items."
         actions={
           <div style={{ display: 'flex', gap: 8 }}>
+            <Link href={`/w/${workspaceId}/inventory`}>
+              <Button size="sm" variant="secondary">
+                Inventory
+              </Button>
+            </Link>
             <Link href={`/w/${workspaceId}/categories`}>
               <Button size="sm" variant="secondary">
                 Categories
@@ -79,18 +84,36 @@ export default function ProductsPage() {
         {items.map((p) => (
           <Card key={p.id} padding={16}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
-              <div>
-                <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                  <strong>{p.name}</strong>
-                  <Badge>{p.type}</Badge>
-                  {p.featured ? <Badge tone="accent">Featured</Badge> : null}
-                  {!p.visible ? <Badge tone="warning">Hidden</Badge> : null}
+              <div style={{ display: 'flex', gap: 12, alignItems: 'center', minWidth: 0 }}>
+                <div
+                  style={{
+                    width: 52,
+                    height: 52,
+                    borderRadius: 12,
+                    flexShrink: 0,
+                    background: 'var(--ns-surface-sunken)',
+                    backgroundImage: p.imageUrl ? `url(${p.imageUrl})` : undefined,
+                    backgroundSize: 'cover',
+                    backgroundPosition: 'center',
+                  }}
+                />
+                <div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <strong>{p.name}</strong>
+                    <Badge>{p.type}</Badge>
+                    <Badge tone={p.deliveryMode === 'instant' ? 'success' : 'warning'}>
+                      {p.deliveryMode || 'manual'}
+                    </Badge>
+                    {p.featured ? <Badge tone="accent">Featured</Badge> : null}
+                    {!p.visible ? <Badge tone="warning">Hidden</Badge> : null}
+                  </div>
+                  <p style={{ margin: '6px 0 0', color: 'var(--ns-muted)', fontSize: 13 }}>
+                    ${Number(p.priceUsd || 0).toFixed(2)}
+                    {p.priceToman ? ` · ${p.priceToman} IRT` : ''}
+                    {p.category?.name ? ` · ${p.category.name}` : ''}
+                    {p.deliveryMode === 'instant' && !p.stockUnlimited ? ` · stock ${p.stockCount}` : ''}
+                  </p>
                 </div>
-                <p style={{ margin: '6px 0 0', color: 'var(--ns-muted)', fontSize: 13 }}>
-                  ${Number(p.priceUsd || 0).toFixed(2)}
-                  {p.priceToman ? ` · ${p.priceToman} IRT` : ''}
-                  {p.category?.name ? ` · ${p.category.name}` : ''}
-                </p>
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <Link href={`/w/${workspaceId}/products/${p.id}`}>

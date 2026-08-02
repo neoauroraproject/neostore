@@ -9,6 +9,8 @@ import { PortalModule } from './portal/portal.module';
 import { WalletModule } from './wallet/wallet.module';
 import { TelegramModule } from './telegram/telegram.module';
 import { AnalyticsModule } from './analytics/analytics.module';
+import { MediaModule } from './media/media.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
@@ -22,6 +24,8 @@ import { AnalyticsModule } from './analytics/analytics.module';
     WalletModule,
     TelegramModule,
     AnalyticsModule,
+    MediaModule,
+    InventoryModule,
   ],
 })
 export class AppModule {}

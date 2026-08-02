@@ -20,6 +20,9 @@ export function ProductCard({
             background:
               'linear-gradient(145deg, var(--ns-surface-sunken) 0%, #dce8e6 45%, var(--ns-accent-soft) 100%)',
             position: 'relative',
+            backgroundImage: product.imageUrl ? `url(${product.imageUrl})` : undefined,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center',
           }}
         >
           {product.featured ? (
@@ -27,43 +30,45 @@ export function ProductCard({
               <Badge tone="accent">Featured</Badge>
             </div>
           ) : null}
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              display: 'grid',
-              placeItems: 'center',
-              fontFamily: 'var(--ns-font-display)',
-              fontSize: 28,
-              fontWeight: 700,
-              letterSpacing: '-0.04em',
-              color: 'var(--ns-accent-ink)',
-              opacity: 0.35,
-            }}
-          >
-            {product.type?.slice(0, 1) || 'P'}
-          </div>
+          {!product.imageUrl ? (
+            <div
+              style={{
+                position: 'absolute',
+                inset: 0,
+                display: 'grid',
+                placeItems: 'center',
+                fontFamily: 'var(--ns-font-display)',
+                fontSize: 28,
+                fontWeight: 700,
+                letterSpacing: '-0.04em',
+                color: 'var(--ns-accent-ink)',
+                opacity: 0.35,
+              }}
+            >
+              {product.type?.slice(0, 1) || 'P'}
+            </div>
+          ) : null}
         </div>
-        <div style={{ padding: 18, display: 'grid', gap: 8 }}>
+        <div style={{ padding: 14, display: 'grid', gap: 6 }}>
           <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, alignItems: 'start' }}>
-            <h3 style={{ margin: 0, fontSize: 16, letterSpacing: '-0.02em', lineHeight: 1.3 }}>{product.name}</h3>
+            <h3 style={{ margin: 0, fontSize: 14, letterSpacing: '-0.02em', lineHeight: 1.3 }}>{product.name}</h3>
             <Badge>{product.type}</Badge>
           </div>
           <p
             style={{
               margin: 0,
               color: 'var(--ns-muted)',
-              fontSize: 13,
+              fontSize: 12,
               display: '-webkit-box',
               WebkitLineClamp: 2,
               WebkitBoxOrient: 'vertical',
               overflow: 'hidden',
-              minHeight: 36,
+              minHeight: 32,
             }}
           >
             {product.description || 'Digital product'}
           </p>
-          <p style={{ margin: '4px 0 0', fontWeight: 700, letterSpacing: '-0.02em' }}>
+          <p style={{ margin: '2px 0 0', fontWeight: 700, letterSpacing: '-0.02em', fontSize: 15 }}>
             {formatMoney(product, currency)}
           </p>
         </div>
