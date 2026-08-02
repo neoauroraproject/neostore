@@ -1,0 +1,84 @@
+/* NeoStore Design Tokens — Phase 1
+   Direction: ink + cool surface + teal accent (premium SaaS, not cream/purple) */
+
+:root {
+  /* Color */
+  --ns-ink: #0b0f14;
+  --ns-ink-soft: #1c2430;
+  --ns-muted: #5b6573;
+  --ns-faint: #8b95a5;
+  --ns-surface: #f4f6f8;
+  --ns-surface-elevated: #ffffff;
+  --ns-surface-sunken: #e8ecf1;
+  --ns-border: #d5dbe3;
+  --ns-border-strong: #b8c0cc;
+  --ns-accent: #0f766e;
+  --ns-accent-hover: #0d9488;
+  --ns-accent-soft: #ccfbf1;
+  --ns-accent-ink: #134e4a;
+  --ns-danger: #b91c1c;
+  --ns-danger-soft: #fee2e2;
+  --ns-success: #047857;
+  --ns-success-soft: #d1fae5;
+  --ns-warning: #b45309;
+  --ns-warning-soft: #fef3c7;
+  --ns-focus: #0d9488;
+
+  /* Type */
+  --ns-font-sans: 'Manrope', system-ui, sans-serif;
+  --ns-font-display: 'Syne', var(--ns-font-sans);
+  --ns-text-xs: 0.75rem;
+  --ns-text-sm: 0.875rem;
+  --ns-text-md: 1rem;
+  --ns-text-lg: 1.125rem;
+  --ns-text-xl: 1.35rem;
+  --ns-text-2xl: 1.75rem;
+  --ns-text-3xl: 2.25rem;
+  --ns-text-4xl: 3rem;
+  --ns-leading-tight: 1.15;
+  --ns-leading-normal: 1.5;
+  --ns-tracking-tight: -0.02em;
+  --ns-tracking-wide: 0.08em;
+
+  /* Space (4px grid) */
+  --ns-space-1: 0.25rem;
+  --ns-space-2: 0.5rem;
+  --ns-space-3: 0.75rem;
+  --ns-space-4: 1rem;
+  --ns-space-5: 1.25rem;
+  --ns-space-6: 1.5rem;
+  --ns-space-8: 2rem;
+  --ns-space-10: 2.5rem;
+  --ns-space-12: 3rem;
+  --ns-space-16: 4rem;
+
+  /* Radius */
+  --ns-radius-sm: 8px;
+  --ns-radius-md: 12px;
+  --ns-radius-lg: 16px;
+  --ns-radius-xl: 24px;
+
+  /* Shadow */
+  --ns-shadow-sm: 0 1px 2px rgba(11, 15, 20, 0.04);
+  --ns-shadow-md: 0 8px 24px rgba(11, 15, 20, 0.06);
+  --ns-shadow-lg: 0 20px 48px rgba(11, 15, 20, 0.08);
+
+  /* Motion */
+  --ns-ease: cubic-bezier(0.22, 1, 0.36, 1);
+  --ns-duration-fast: 150ms;
+  --ns-duration: 250ms;
+  --ns-duration-slow: 400ms;
+
+  /* Layout */
+  --ns-max: 1120px;
+  --ns-nav-h: 64px;
+  --ns-bottom-nav-h: 64px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --ns-duration-fast: 0ms;
+    --ns-duration: 0ms;
+    --ns-duration-slow: 0ms;
+  }
+}

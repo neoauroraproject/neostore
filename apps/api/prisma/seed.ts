@@ -8,11 +8,13 @@ async function main() {
   const password = process.env.ADMIN_PASSWORD || 'neostore123';
   const adminName = process.env.ADMIN_NAME || 'NeoStore Owner';
   const storeName = process.env.STORE_NAME || 'Demo Store';
-  const storeSlug = (process.env.STORE_SLUG || 'demo')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-    .slice(0, 40) || 'demo';
+  const rawSlug = (process.env.STORE_SLUG || '').trim();
+  const storeSlug =
+    (rawSlug || storeName || 'demo')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 40) || 'demo';
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.upsert({

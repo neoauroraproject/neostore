@@ -90,6 +90,7 @@ NeoStore/
   apps/storefront       # Public marketplace / shop / portal / TMA
   apps/worker           # BullMQ processors (optional split)
   packages/shared       # Types, enums, zod schemas
+  packages/ui           # Design system (tokens + primitives) — see docs/ARCHITECTURE-PHASE1-UI.md
   install/              # install.sh, update.sh, docker compose
   docs/
 ```

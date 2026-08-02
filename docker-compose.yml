@@ -54,7 +54,8 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: /api
-      STORE_SLUG: ${STORE_SLUG:-store}
+      # Empty = primary shop on domain root (resolved via GET /api/public)
+      STORE_SLUG: ${STORE_SLUG-}
       PORT: "4102"
     depends_on:
       - api

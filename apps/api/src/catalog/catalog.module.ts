@@ -226,9 +226,29 @@ export class CatalogService {
   async publicCatalog(slug: string) {
     const store = await this.prisma.storeProfile.findUnique({
       where: { slug },
-      include: { workspace: true },
     });
     if (!store?.enabled) throw new NotFoundException('Store not found');
+    return this.catalogPayload(store);
+  }
+
+  /** Primary shop for domain root when STORE_SLUG is empty. */
+  async publicPrimaryCatalog() {
+    const store = await this.prisma.storeProfile.findFirst({
+      where: { enabled: true },
+      orderBy: { createdAt: 'asc' },
+    });
+    if (!store) throw new NotFoundException('Store not found');
+    return this.catalogPayload(store);
+  }
+
+  private async catalogPayload(store: {
+    workspaceId: string;
+    title: string;
+    slug: string;
+    description: string | null;
+    defaultCurrency: string;
+    paymentConfig: unknown;
+  }) {
     const [categories, products] = await Promise.all([
       this.prisma.category.findMany({
         where: { workspaceId: store.workspaceId, visible: true, enabled: true },
@@ -367,6 +387,11 @@ export class CatalogAdminController {
 @Controller('public')
 export class CatalogPublicController {
   constructor(private readonly catalog: CatalogService) {}
+
+  @Get()
+  getPrimaryCatalog() {
+    return this.catalog.publicPrimaryCatalog();
+  }
 
   @Get(':slug')
   getPublicCatalog(@Param('slug') slug: string) {

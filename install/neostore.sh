@@ -137,6 +137,16 @@ bootstrap_repo() {
   fi
 }
 
+# Quote a value for .env so `source` and docker compose both accept spaces/special chars
+env_quote() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//\$/\\\$}"
+  s="${s//\`/\\\`}"
+  printf '"%s"' "$s"
+}
+
 write_env() {
   local domain="$1"
   local scheme="$2"
@@ -159,22 +169,22 @@ write_env() {
 NODE_ENV=production
 PORT=4100
 POSTGRES_USER=neostore
-POSTGRES_PASSWORD=${pgpass}
+POSTGRES_PASSWORD=$(env_quote "$pgpass")
 POSTGRES_DB=neostore
-DATABASE_URL=postgresql://neostore:${pgpass}@postgres:5432/neostore
+DATABASE_URL=$(env_quote "postgresql://neostore:${pgpass}@postgres:5432/neostore")
 REDIS_URL=redis://redis:6379
-JWT_SECRET=${jwt}
-PUBLIC_BASE_URL=${base_url}
-TELEGRAM_WEBHOOK_BASE_URL=${base_url}
+JWT_SECRET=$(env_quote "$jwt")
+PUBLIC_BASE_URL=$(env_quote "$base_url")
+TELEGRAM_WEBHOOK_BASE_URL=$(env_quote "$base_url")
 STORAGE_DRIVER=local
 STORAGE_LOCAL_PATH=/data/storage
-DOMAIN=${domain}
-TLS_SCHEME=${scheme}
-ADMIN_EMAIL=${admin_email}
-ADMIN_PASSWORD=${admin_password}
-ADMIN_NAME=${admin_name}
-STORE_NAME=${store_name}
-STORE_SLUG=${store_slug}
+DOMAIN=$(env_quote "$domain")
+TLS_SCHEME=$(env_quote "$scheme")
+ADMIN_EMAIL=$(env_quote "$admin_email")
+ADMIN_PASSWORD=$(env_quote "$admin_password")
+ADMIN_NAME=$(env_quote "$admin_name")
+STORE_NAME=$(env_quote "$store_name")
+STORE_SLUG=$(env_quote "$store_slug")
 NEOSTORE_VERSION=latest
 NEOSTORE_PULL_POLICY=always
 EOF
@@ -285,13 +295,10 @@ do_install() {
   local admin_name="$REPLY"
   prompt "Store name" "My Store"
   local store_name="$REPLY"
-  local default_slug
-  default_slug="$(slugify "$store_name")"
-  [[ -n "$default_slug" ]] || default_slug="store"
-  prompt "Store slug (shop id)" "$default_slug"
+  # Optional: leave empty so the primary shop lives on the domain root (/)
+  prompt "Store slug (optional — empty = primary shop on domain root)" ""
   local store_slug
   store_slug="$(slugify "$REPLY")"
-  [[ -n "$store_slug" ]] || store_slug="store"
 
   write_env "$domain" "$scheme" "$admin_email" "$admin_password" "$admin_name" "$store_name" "$store_slug"
   write_caddyfile "$domain" "$scheme"
@@ -326,7 +333,11 @@ do_install() {
     echo -e "  API:     ${BOLD}http://SERVER_IP/api/docs${NC}"
   fi
   echo -e "  Login:   ${BOLD}${admin_email}${NC}"
-  echo -e "  Slug:    ${BOLD}${store_slug}${NC}  (also ${scheme:-http}://${domain:-SERVER_IP}/${store_slug})"
+  if [[ -n "$store_slug" ]]; then
+    echo -e "  Slug:    ${BOLD}${store_slug}${NC}  (also ${scheme:-http}://${domain:-SERVER_IP}/${store_slug})"
+  else
+    echo -e "  Slug:    ${BOLD}(empty)${NC}  — primary shop on domain root"
+  fi
   echo -e "  Data:    ${BOLD}${INSTALL_DIR}${NC}"
   echo
   echo "Open installer menu again:"
@@ -457,10 +468,10 @@ do_change_domain() {
     base_url="http://localhost"
   fi
   sed -i.bak -E \
-    -e "s|^DOMAIN=.*|DOMAIN=${domain}|" \
-    -e "s|^TLS_SCHEME=.*|TLS_SCHEME=${scheme}|" \
-    -e "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=${base_url}|" \
-    -e "s|^TELEGRAM_WEBHOOK_BASE_URL=.*|TELEGRAM_WEBHOOK_BASE_URL=${base_url}|" \
+    -e "s|^DOMAIN=.*|DOMAIN=$(env_quote "$domain")|" \
+    -e "s|^TLS_SCHEME=.*|TLS_SCHEME=$(env_quote "$scheme")|" \
+    -e "s|^PUBLIC_BASE_URL=.*|PUBLIC_BASE_URL=$(env_quote "$base_url")|" \
+    -e "s|^TELEGRAM_WEBHOOK_BASE_URL=.*|TELEGRAM_WEBHOOK_BASE_URL=$(env_quote "$base_url")|" \
     "$INSTALL_DIR/.env"
   write_caddyfile "$domain" "$scheme"
   compose up -d caddy api

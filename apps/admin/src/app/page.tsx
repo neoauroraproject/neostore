@@ -1,103 +1,242 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { Badge, Button, Card, EmptyState, Input, PageHeader, Skeleton } from '@neostore/ui';
+import { AdminChrome } from '../components/AdminChrome';
+import {
+  type ActiveContext,
+  type AuthSession,
+  clearSession,
+  loadContext,
+  loadSession,
+  saveContext,
+  saveSession,
+} from '../lib/session';
 
 const API = process.env.NEXT_PUBLIC_API_URL || '/api';
 
 export default function AdminHome() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [token, setToken] = useState('');
-  const [workspaces, setWorkspaces] = useState<any[]>([]);
+  const [session, setSession] = useState<AuthSession | null>(null);
+  const [context, setContext] = useState<ActiveContext>({ kind: 'customer' });
   const [dashboard, setDashboard] = useState<any>(null);
   const [extensions, setExtensions] = useState<any>(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  async function login() {
-    setError('');
-    const res = await fetch(`${API}/auth/login`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.message || 'Login failed');
-      return;
+  useEffect(() => {
+    const s = loadSession();
+    if (s) {
+      setSession(s);
+      const ctx = loadContext(s);
+      setContext(ctx);
+      void hydrate(s, ctx);
     }
-    setToken(data.token);
-    setWorkspaces(data.workspaces || []);
-    if (data.workspaces?.[0]) {
-      const wid = data.workspaces[0].id;
-      const dash = await fetch(`${API}/admin/workspaces/${wid}/dashboard`, {
-        headers: { Authorization: `Bearer ${data.token}` },
-      }).then((r) => r.json());
-      setDashboard(dash);
+  }, []);
+
+  async function hydrate(s: AuthSession, ctx: ActiveContext) {
+    setLoading(true);
+    setError('');
+    try {
+      if (ctx.kind === 'seller') {
+        const dash = await fetch(`${API}/admin/workspaces/${ctx.workspaceId}/dashboard`, {
+          headers: { Authorization: `Bearer ${s.token}` },
+        }).then((r) => r.json());
+        setDashboard(dash);
+      } else {
+        setDashboard(null);
+      }
       const ext = await fetch(`${API}/admin/extensions`, {
-        headers: { Authorization: `Bearer ${data.token}` },
+        headers: { Authorization: `Bearer ${s.token}` },
       }).then((r) => r.json());
       setExtensions(ext);
+    } catch (e: any) {
+      setError(e?.message || 'Failed to load');
+    } finally {
+      setLoading(false);
     }
   }
 
-  return (
-    <main style={{ maxWidth: 960, margin: '0 auto', padding: 32 }}>
-      <h1 style={{ fontSize: 32, marginBottom: 8 }}>NeoStore Admin</h1>
-      <p style={{ opacity: 0.7, marginBottom: 24 }}>Workspace console · Extensions · Commerce</p>
+  async function login() {
+    setError('');
+    setLoading(true);
+    try {
+      const res = await fetch(`${API}/auth/login`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.message || 'Login failed');
+        return;
+      }
+      const next: AuthSession = {
+        token: data.token,
+        role: data.user?.role || data.role,
+        email: data.user?.email || email,
+        name: data.user?.name,
+        workspaces: data.workspaces || [],
+      };
+      saveSession(next);
+      const ctx = loadContext(next);
+      saveContext(ctx);
+      setSession(next);
+      setContext(ctx);
+      if (ctx.kind === 'seller') {
+        window.location.href = `/admin/w/${ctx.workspaceId}`;
+        return;
+      }
+      if (ctx.kind === 'platform') {
+        window.location.href = '/admin/platform';
+        return;
+      }
+      await hydrate(next, ctx);
+    } catch (e: any) {
+      setError(e?.message || 'Network error');
+    } finally {
+      setLoading(false);
+    }
+  }
 
-      {!token ? (
-        <div style={{ display: 'grid', gap: 12, maxWidth: 360 }}>
-          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" style={input} />
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            placeholder="Password"
-            style={input}
-          />
-          <button onClick={login} style={btn}>
-            Sign in
-          </button>
-          {error ? <p style={{ color: '#f87171' }}>{error}</p> : null}
+  function logout() {
+    clearSession();
+    setSession(null);
+    setDashboard(null);
+    setExtensions(null);
+  }
+
+  async function onContext(ctx: ActiveContext) {
+    setContext(ctx);
+    saveContext(ctx);
+    if (ctx.kind === 'customer') {
+      window.location.href = '/portal';
+      return;
+    }
+    if (ctx.kind === 'platform') {
+      window.location.href = '/admin/platform';
+      return;
+    }
+    if (ctx.kind === 'seller') {
+      window.location.href = `/admin/w/${ctx.workspaceId}`;
+      return;
+    }
+    if (session) await hydrate(session, ctx);
+  }
+
+  if (!session) {
+    return (
+      <main className="ns-container" style={{ paddingTop: 72, maxWidth: 420 }}>
+        <PageHeader
+          eyebrow="Console"
+          title="Sign in"
+          description="Super Admin and Seller share this console. Switch context after login."
+        />
+        <Card padding={24}>
+          <div style={{ display: 'grid', gap: 12 }}>
+            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
+            <Input
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Password"
+            />
+            <Button onClick={login} disabled={loading} fullWidth>
+              {loading ? 'Signing in…' : 'Sign in'}
+            </Button>
+            {error ? <p style={{ color: 'var(--ns-danger)', margin: 0 }}>{error}</p> : null}
+          </div>
+        </Card>
+      </main>
+    );
+  }
+
+  const title =
+    context.kind === 'platform' ? 'Platform' : context.kind === 'seller' ? 'Seller workspace' : 'Console';
+
+  return (
+    <AdminChrome title={title} session={session} context={context} onContext={onContext} onLogout={logout}>
+      <PageHeader
+        eyebrow={context.kind === 'platform' ? 'Super Admin' : 'Seller Panel'}
+        title={
+          context.kind === 'platform'
+            ? 'Platform overview'
+            : context.kind === 'seller'
+              ? context.workspaceName || 'Workspace'
+              : 'Choose a context'
+        }
+        description="Seller Panel is live — open your workspace for products, orders, and settings."
+        actions={
+          context.kind === 'seller' ? (
+            <Link href={`/w/${context.workspaceId}`}>
+              <Button size="sm">Open workspace routes</Button>
+            </Link>
+          ) : context.kind === 'platform' ? (
+            <Link href="/platform">
+              <Button size="sm">Platform routes</Button>
+            </Link>
+          ) : null
+        }
+      />
+
+      {loading ? (
+        <div style={{ display: 'grid', gap: 12 }}>
+          <Skeleton height={100} radius={16} />
+          <Skeleton height={160} radius={16} />
         </div>
-      ) : (
-        <div style={{ display: 'grid', gap: 24 }}>
-          <section style={card}>
-            <h2>Dashboard</h2>
-            <pre style={{ whiteSpace: 'pre-wrap' }}>{JSON.stringify(dashboard, null, 2)}</pre>
-            <p>Workspaces: {workspaces.map((w) => w.slug).join(', ')}</p>
-          </section>
-          <section style={card}>
-            <h2>Extensions</h2>
-            <pre style={{ whiteSpace: 'pre-wrap', fontSize: 12 }}>
+      ) : null}
+
+      {context.kind === 'platform' && !loading ? (
+        <div style={{ display: 'grid', gap: 16 }}>
+          <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))' }}>
+            {['Workspaces', 'Sellers', 'Payments', 'System'].map((label) => (
+              <Card key={label}>
+                <p style={{ margin: 0, color: 'var(--ns-muted)', fontSize: 13 }}>{label}</p>
+                <p style={{ margin: '8px 0 0', fontWeight: 700 }}>Phase next</p>
+              </Card>
+            ))}
+          </div>
+          <Card>
+            <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
+              <strong>Extensions host</strong>
+              <Badge tone="accent">Read-only</Badge>
+            </div>
+            <pre style={{ margin: 0, fontSize: 12, overflow: 'auto', maxHeight: 240 }}>
               {JSON.stringify(extensions?.installed?.slice?.(0, 8) || extensions, null, 2)}
             </pre>
-          </section>
+          </Card>
         </div>
-      )}
-    </main>
+      ) : null}
+
+      {context.kind === 'seller' && !loading ? (
+        dashboard ? (
+          <div style={{ display: 'grid', gap: 16 }}>
+            <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(160px, 1fr))' }}>
+              {Object.entries(dashboard)
+                .filter(([, v]) => typeof v === 'number' || typeof v === 'string')
+                .slice(0, 6)
+                .map(([k, v]) => (
+                  <Card key={k}>
+                    <p style={{ margin: 0, color: 'var(--ns-muted)', fontSize: 13 }}>{k}</p>
+                    <p style={{ margin: '8px 0 0', fontSize: 24, fontWeight: 700, letterSpacing: '-0.03em' }}>
+                      {String(v)}
+                    </p>
+                  </Card>
+                ))}
+            </div>
+            <Card>
+              <strong>Raw dashboard</strong>
+              <pre style={{ margin: '8px 0 0', fontSize: 12, overflow: 'auto' }}>{JSON.stringify(dashboard, null, 2)}</pre>
+            </Card>
+          </div>
+        ) : (
+          <EmptyState title="No dashboard data" description="Workspace metrics will appear after catalog activity." />
+        )
+      ) : null}
+
+      {error ? <p style={{ color: 'var(--ns-danger)' }}>{error}</p> : null}
+    </AdminChrome>
   );
 }
-
-const input: React.CSSProperties = {
-  padding: '10px 12px',
-  borderRadius: 10,
-  border: '1px solid #2a2f3a',
-  background: '#12151a',
-  color: '#fff',
-};
-const btn: React.CSSProperties = {
-  padding: '10px 14px',
-  borderRadius: 10,
-  border: 0,
-  background: '#3b82f6',
-  color: '#fff',
-  fontWeight: 600,
-  cursor: 'pointer',
-};
-const card: React.CSSProperties = {
-  border: '1px solid #222833',
-  borderRadius: 16,
-  padding: 20,
-  background: '#12151a',
-};

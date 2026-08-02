@@ -18,7 +18,9 @@ async function main() {
   const password = process.env.ADMIN_PASSWORD || 'neostore123';
   const adminName = process.env.ADMIN_NAME || 'NeoStore Owner';
   const storeName = process.env.STORE_NAME || 'Demo Store';
-  const storeSlug = slugify(process.env.STORE_SLUG || storeName || 'demo');
+  // Empty STORE_SLUG → derive from store name (primary shop still needs an internal id)
+  const rawSlug = (process.env.STORE_SLUG || '').trim();
+  const storeSlug = slugify(rawSlug || storeName || 'demo');
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.upsert({

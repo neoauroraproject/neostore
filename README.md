@@ -52,6 +52,8 @@ CI: [Actions](https://github.com/neoauroraproject/neostore/actions) builds on ev
 | Doc | Role |
 |-----|------|
 | [SPEC.md](./SPEC.md) | Product + Store Core P0 |
+| [docs/ARCHITECTURE-PHASE1-UI.md](./docs/ARCHITECTURE-PHASE1-UI.md) | Surfaces, roles, Design System, Front Store |
+| [docs/ARCHITECTURE-PHASE2-SELLER.md](./docs/ARCHITECTURE-PHASE2-SELLER.md) | Seller Panel + Checkout |
 | [docs/PRD.md](./docs/PRD.md) | Marketplace PRD |
 | [docs/EXTENSIONS.md](./docs/EXTENSIONS.md) | Extension SDK / Host |
 
