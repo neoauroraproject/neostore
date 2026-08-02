@@ -50,9 +50,16 @@ export default function ProductsPage() {
         title="Products"
         description="Create and manage sellable items."
         actions={
-          <Link href={`/w/${workspaceId}/products/new`}>
-            <Button size="sm">New product</Button>
-          </Link>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Link href={`/w/${workspaceId}/categories`}>
+              <Button size="sm" variant="secondary">
+                Categories
+              </Button>
+            </Link>
+            <Link href={`/w/${workspaceId}/products/new`}>
+              <Button size="sm">New product</Button>
+            </Link>
+          </div>
         }
       />
       {loading ? <Skeleton height={160} radius={16} /> : null}

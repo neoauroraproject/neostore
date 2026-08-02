@@ -52,6 +52,7 @@ export function SellerShell({
   const nav: NavItem[] = [
     { href: base, label: 'Dashboard', icon: 'home' },
     { href: `${base}/products`, label: 'Products', icon: 'bag' },
+    { href: `${base}/categories`, label: 'Categories', icon: 'grid' },
     { href: `${base}/orders`, label: 'Orders', icon: 'check' },
     { href: `${base}/customers`, label: 'Customers', icon: 'user' },
     { href: `${base}/analytics`, label: 'Analytics', icon: 'spark' },

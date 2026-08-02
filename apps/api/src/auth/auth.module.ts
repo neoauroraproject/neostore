@@ -99,11 +99,24 @@ export class AuthService {
     return { token, user: this.publicUser(user), workspace };
   }
 
-  async login(input: { email: string; password: string }) {
-    await this.hooks.run('beforeLogin', { email: input.email, mode: 'login' });
-    const user = await this.prisma.user.findUnique({
-      where: { email: input.email.trim().toLowerCase() },
-    });
+  async login(input: { email?: string; password: string; login?: string }) {
+    const identifier = String(input.login || input.email || '')
+      .trim()
+      .toLowerCase();
+    if (!identifier || !input.password) {
+      throw new BadRequestException('email (or admin name) and password required');
+    }
+    await this.hooks.run('beforeLogin', { email: identifier, mode: 'login' });
+
+    let user = await this.prisma.user.findUnique({ where: { email: identifier } });
+    if (!user) {
+      // Installer sets ADMIN_NAME — allow sign-in with that name when unique
+      const byName = await this.prisma.user.findMany({
+        where: { name: { equals: identifier, mode: 'insensitive' } },
+        take: 2,
+      });
+      if (byName.length === 1) user = byName[0];
+    }
     if (!user?.passwordHash) throw new UnauthorizedException('Invalid credentials');
     const ok = await bcrypt.compare(input.password, user.passwordHash);
     if (!ok) throw new UnauthorizedException('Invalid credentials');
@@ -171,7 +184,7 @@ export class AuthController {
   }
 
   @Post('login')
-  login(@Body() body: { email: string; password: string }) {
+  login(@Body() body: { email?: string; password: string; login?: string }) {
     return this.auth.login(body);
   }
 

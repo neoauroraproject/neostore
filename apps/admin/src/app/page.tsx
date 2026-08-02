@@ -66,7 +66,7 @@ export default function AdminHome() {
       const res = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ login: email, email, password }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -132,21 +132,40 @@ export default function AdminHome() {
         <PageHeader
           eyebrow="Console"
           title="Sign in"
-          description="Super Admin and Seller share this console. Switch context after login."
+          description="Use the Admin email or Admin name from install, plus the password you set."
         />
         <Card padding={24}>
           <div style={{ display: 'grid', gap: 12 }}>
-            <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" />
-            <Input
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              placeholder="Password"
-            />
+            <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 600 }}>
+              Email or admin name
+              <Input
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="admin@example.com or Admin"
+                autoComplete="username"
+              />
+            </label>
+            <label style={{ display: 'grid', gap: 6, fontSize: 13, fontWeight: 600 }}>
+              Password
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Install password"
+                autoComplete="current-password"
+              />
+            </label>
             <Button onClick={login} disabled={loading} fullWidth>
               {loading ? 'Signing in…' : 'Sign in'}
             </Button>
-            {error ? <p style={{ color: 'var(--ns-danger)', margin: 0 }}>{error}</p> : null}
+            {error ? (
+              <p style={{ color: 'var(--ns-danger)', margin: 0 }}>
+                {error}
+                {/invalid credentials/i.test(error)
+                  ? ' — check ADMIN_EMAIL / ADMIN_NAME and password in /opt/neostore/.env'
+                  : ''}
+              </p>
+            ) : null}
           </div>
         </Card>
       </main>

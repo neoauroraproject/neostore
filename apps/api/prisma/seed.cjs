@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* eslint-disable @typescript-eslint/no-require-imports */
-const { PrismaClient, Role, DeliveryMode } = require('@prisma/client');
+const { PrismaClient, Role } = require('@prisma/client');
 const bcrypt = require('bcryptjs');
 
 const prisma = new PrismaClient();
@@ -17,10 +17,9 @@ async function main() {
   const email = (process.env.ADMIN_EMAIL || 'owner@neostore.local').trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD || 'neostore123';
   const adminName = process.env.ADMIN_NAME || 'NeoStore Owner';
-  const storeName = process.env.STORE_NAME || 'Demo Store';
-  // Empty STORE_SLUG → derive from store name (primary shop still needs an internal id)
+  const storeName = process.env.STORE_NAME || 'My Store';
   const rawSlug = (process.env.STORE_SLUG || '').trim();
-  const storeSlug = slugify(rawSlug || storeName || 'demo');
+  const storeSlug = slugify(rawSlug || storeName || 'store');
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.upsert({
@@ -40,10 +39,6 @@ async function main() {
 
   let workspace = await prisma.workspace.findUnique({ where: { slug: storeSlug } });
   if (!workspace) {
-    // Prefer existing demo workspace if present
-    workspace = await prisma.workspace.findUnique({ where: { slug: 'demo' } });
-  }
-  if (!workspace) {
     workspace = await prisma.workspace.create({
       data: {
         name: storeName,
@@ -53,7 +48,7 @@ async function main() {
           create: {
             title: storeName,
             slug: storeSlug,
-            description: `${storeName} powered by NeoStore`,
+            description: storeName,
             defaultCurrency: 'USD',
             paymentConfig: {
               methods: { manual_bank: true, manual_crypto: true, cryptomus: false },
@@ -73,67 +68,54 @@ async function main() {
       where: { id: workspace.id },
       data: { name: storeName },
     });
-    await prisma.storeProfile.update({
-      where: { workspaceId: workspace.id },
-      data: { title: storeName, slug: storeSlug },
-    }).catch(async () => {
-      await prisma.storeProfile.create({
-        data: {
-          workspaceId: workspace.id,
-          title: storeName,
-          slug: storeSlug,
-          paymentConfig: {
-            methods: { manual_bank: true, manual_crypto: true, cryptomus: false },
-            cards: [],
+    await prisma.storeProfile
+      .update({
+        where: { workspaceId: workspace.id },
+        data: { title: storeName, slug: storeSlug },
+      })
+      .catch(async () => {
+        await prisma.storeProfile.create({
+          data: {
+            workspaceId: workspace.id,
+            title: storeName,
+            slug: storeSlug,
+            description: storeName,
+            paymentConfig: {
+              methods: { manual_bank: true, manual_crypto: true, cryptomus: false },
+              cards: [],
+            },
           },
-        },
+        });
       });
-    });
   }
 
-  const category =
-    (await prisma.category.findFirst({ where: { workspaceId: workspace.id, name: 'Digital' } })) ||
-    (await prisma.category.create({
-      data: { workspaceId: workspace.id, name: 'Digital', description: 'Digital goods' },
-    }));
-
-  const blueprint =
-    (await prisma.fulfillmentBlueprint.findFirst({
-      where: { workspaceId: workspace.id, providerType: 'neostore.delivery.manual' },
-    })) ||
-    (await prisma.fulfillmentBlueprint.create({
+  // Fulfillment blueprint is infrastructure (not catalog demo data)
+  const blueprint = await prisma.fulfillmentBlueprint.findFirst({
+    where: { workspaceId: workspace.id, providerType: 'neostore.delivery.manual' },
+  });
+  if (!blueprint) {
+    await prisma.fulfillmentBlueprint.create({
       data: {
         workspaceId: workspace.id,
         name: 'Manual Delivery',
         providerType: 'neostore.delivery.manual',
         providerConfig: {},
       },
-    }));
-
-  const existingProduct = await prisma.product.findFirst({
-    where: { workspaceId: workspace.id, name: 'Starter License' },
-  });
-  if (!existingProduct) {
-    await prisma.product.create({
-      data: {
-        workspaceId: workspace.id,
-        categoryId: category.id,
-        blueprintId: blueprint.id,
-        name: 'Starter License',
-        description: 'Demo license product',
-        type: 'License',
-        deliveryMode: DeliveryMode.manual,
-        priceUsd: 9.99,
-        priceToman: 500000,
-        durationDays: 30,
-        visible: true,
-        renewable: true,
-      },
     });
   }
 
-  console.log('Seed OK');
-  console.log('Login:', email);
+  // Remove known installer demo leftovers (safe exact match only)
+  await prisma.product.deleteMany({
+    where: {
+      workspaceId: workspace.id,
+      name: 'Starter License',
+      description: 'Demo license product',
+    },
+  });
+
+  console.log('Seed OK — no demo catalog');
+  console.log('Login email:', email);
+  console.log('Login name:', adminName);
   console.log('Shop slug:', storeSlug);
 }
 

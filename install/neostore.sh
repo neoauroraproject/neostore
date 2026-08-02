@@ -332,7 +332,8 @@ do_install() {
     echo -e "  Admin:   ${BOLD}http://SERVER_IP/admin${NC}"
     echo -e "  API:     ${BOLD}http://SERVER_IP/api/docs${NC}"
   fi
-  echo -e "  Login:   ${BOLD}${admin_email}${NC}"
+  echo -e "  Login:   ${BOLD}${admin_email}${NC}  (or admin name: ${BOLD}${admin_name}${NC})"
+  echo -e "  Password: (the one you set during install)"
   if [[ -n "$store_slug" ]]; then
     echo -e "  Slug:    ${BOLD}${store_slug}${NC}  (also ${scheme:-http}://${domain:-SERVER_IP}/${store_slug})"
   else

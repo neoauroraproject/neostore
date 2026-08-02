@@ -1,0 +1,201 @@
+'use client';
+
+import type { FormEvent } from 'react';
+import { useEffect, useState } from 'react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { Badge, Button, Card, EmptyState, Input, PageHeader, Skeleton } from '@neostore/ui';
+import { SellerShell, useSellerSession } from '../../../../components/SellerShell';
+import { api, workspacePath } from '../../../../lib/api';
+
+export default function CategoriesPage() {
+  const params = useParams<{ workspaceId: string }>();
+  const workspaceId = params.workspaceId;
+  const session = useSellerSession(workspaceId);
+  const [items, setItems] = useState<any[]>([]);
+  const [error, setError] = useState('');
+  const [ok, setOk] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [editId, setEditId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editDescription, setEditDescription] = useState('');
+
+  async function load() {
+    if (!session?.token) return;
+    setLoading(true);
+    setError('');
+    try {
+      const data = await api<any[]>(workspacePath(workspaceId, '/categories'), { token: session.token });
+      setItems(Array.isArray(data) ? data : []);
+    } catch (e: any) {
+      setError(e.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token, workspaceId]);
+
+  async function createCategory(e: FormEvent) {
+    e.preventDefault();
+    if (!session?.token || !name.trim()) return;
+    setSaving(true);
+    setError('');
+    setOk('');
+    try {
+      await api(workspacePath(workspaceId, '/categories'), {
+        method: 'POST',
+        token: session.token,
+        body: JSON.stringify({ name: name.trim(), description: description.trim() || undefined }),
+      });
+      setName('');
+      setDescription('');
+      setOk('Category created.');
+      await load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function saveEdit(id: string) {
+    if (!session?.token || !editName.trim()) return;
+    setSaving(true);
+    setError('');
+    try {
+      await api(workspacePath(workspaceId, `/categories/${id}`), {
+        method: 'PATCH',
+        token: session.token,
+        body: JSON.stringify({
+          name: editName.trim(),
+          description: editDescription.trim() || undefined,
+        }),
+      });
+      setEditId(null);
+      await load();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function toggleVisible(cat: any) {
+    if (!session?.token) return;
+    try {
+      await api(workspacePath(workspaceId, `/categories/${cat.id}`), {
+        method: 'PATCH',
+        token: session.token,
+        body: JSON.stringify({ visible: !cat.visible, enabled: cat.enabled !== false }),
+      });
+      await load();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  async function remove(id: string) {
+    if (!session?.token || !confirm('Delete this category? Products in it may fail until reassigned.')) return;
+    try {
+      await api(workspacePath(workspaceId, `/categories/${id}`), {
+        method: 'DELETE',
+        token: session.token,
+      });
+      await load();
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
+  return (
+    <SellerShell workspaceId={workspaceId}>
+      <PageHeader
+        eyebrow="Catalog"
+        title="Categories"
+        description="Organize products. Create categories before adding products."
+        actions={
+          <Link href={`/w/${workspaceId}/products`}>
+            <Button size="sm" variant="secondary">
+              Products
+            </Button>
+          </Link>
+        }
+      />
+
+      <Card padding={24} style={{ marginBottom: 20, maxWidth: 560 }}>
+        <form onSubmit={createCategory} style={{ display: 'grid', gap: 12 }}>
+          <strong>New category</strong>
+          <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" required />
+          <Input value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Description (optional)" />
+          <Button type="submit" disabled={saving || !name.trim()}>
+            {saving ? 'Saving…' : 'Create category'}
+          </Button>
+        </form>
+      </Card>
+
+      {loading ? <Skeleton height={120} radius={16} /> : null}
+      {!loading && items.length === 0 ? (
+        <EmptyState icon="grid" title="No categories yet" description="Create your first category to start adding products." />
+      ) : null}
+
+      <div style={{ display: 'grid', gap: 10 }}>
+        {items.map((c) => (
+          <Card key={c.id} padding={16}>
+            {editId === c.id ? (
+              <div style={{ display: 'grid', gap: 10 }}>
+                <Input value={editName} onChange={(e) => setEditName(e.target.value)} />
+                <Input value={editDescription} onChange={(e) => setEditDescription(e.target.value)} />
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <Button size="sm" onClick={() => saveEdit(c.id)} disabled={saving}>
+                    Save
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => setEditId(null)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
+                <div>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <strong>{c.name}</strong>
+                    {!c.visible ? <Badge tone="warning">Hidden</Badge> : <Badge tone="success">Visible</Badge>}
+                  </div>
+                  <p style={{ margin: '6px 0 0', color: 'var(--ns-muted)', fontSize: 13 }}>{c.description || '—'}</p>
+                </div>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <Button
+                    size="sm"
+                    variant="secondary"
+                    onClick={() => {
+                      setEditId(c.id);
+                      setEditName(c.name || '');
+                      setEditDescription(c.description || '');
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button size="sm" variant="secondary" onClick={() => toggleVisible(c)}>
+                    {c.visible ? 'Hide' : 'Show'}
+                  </Button>
+                  <Button size="sm" variant="danger" onClick={() => remove(c.id)}>
+                    Delete
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        ))}
+      </div>
+      {ok ? <p style={{ color: 'var(--ns-success)' }}>{ok}</p> : null}
+      {error ? <p style={{ color: 'var(--ns-danger)' }}>{error}</p> : null}
+    </SellerShell>
+  );
+}

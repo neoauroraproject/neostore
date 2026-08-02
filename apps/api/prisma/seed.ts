@@ -1,4 +1,4 @@
-import { PrismaClient, Role, DeliveryMode } from '@prisma/client';
+import { PrismaClient, Role } from '@prisma/client';
 import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
@@ -7,14 +7,14 @@ async function main() {
   const email = (process.env.ADMIN_EMAIL || 'owner@neostore.local').trim().toLowerCase();
   const password = process.env.ADMIN_PASSWORD || 'neostore123';
   const adminName = process.env.ADMIN_NAME || 'NeoStore Owner';
-  const storeName = process.env.STORE_NAME || 'Demo Store';
+  const storeName = process.env.STORE_NAME || 'My Store';
   const rawSlug = (process.env.STORE_SLUG || '').trim();
   const storeSlug =
-    (rawSlug || storeName || 'demo')
+    (rawSlug || storeName || 'store')
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, '-')
       .replace(/^-+|-+$/g, '')
-      .slice(0, 40) || 'demo';
+      .slice(0, 40) || 'store';
 
   const passwordHash = await bcrypt.hash(password, 10);
   const user = await prisma.user.upsert({
@@ -43,10 +43,10 @@ async function main() {
           create: {
             title: storeName,
             slug: storeSlug,
-            description: `${storeName} powered by NeoStore`,
+            description: storeName,
             defaultCurrency: 'USD',
             paymentConfig: {
-              methods: { manual_bank: true, manual_crypto: true, cryptomus: true },
+              methods: { manual_bank: true, manual_crypto: true, cryptomus: false },
               cards: [],
             },
           },
@@ -61,49 +61,31 @@ async function main() {
     });
   }
 
-  const category =
-    (await prisma.category.findFirst({ where: { workspaceId: workspace.id, name: 'Digital' } })) ||
-    (await prisma.category.create({
-      data: { workspaceId: workspace.id, name: 'Digital', description: 'Digital goods' },
-    }));
-
-  const blueprint =
-    (await prisma.fulfillmentBlueprint.findFirst({
-      where: { workspaceId: workspace.id, providerType: 'neostore.delivery.manual' },
-    })) ||
-    (await prisma.fulfillmentBlueprint.create({
+  const blueprint = await prisma.fulfillmentBlueprint.findFirst({
+    where: { workspaceId: workspace.id, providerType: 'neostore.delivery.manual' },
+  });
+  if (!blueprint) {
+    await prisma.fulfillmentBlueprint.create({
       data: {
         workspaceId: workspace.id,
         name: 'Manual Delivery',
         providerType: 'neostore.delivery.manual',
         providerConfig: {},
       },
-    }));
-
-  const existingProduct = await prisma.product.findFirst({
-    where: { workspaceId: workspace.id, name: 'Starter License' },
-  });
-  if (!existingProduct) {
-    await prisma.product.create({
-      data: {
-        workspaceId: workspace.id,
-        categoryId: category.id,
-        blueprintId: blueprint.id,
-        name: 'Starter License',
-        description: 'Demo license product',
-        type: 'License',
-        deliveryMode: DeliveryMode.manual,
-        priceUsd: 9.99,
-        priceToman: 500000,
-        durationDays: 30,
-        visible: true,
-        renewable: true,
-      },
     });
   }
 
-  console.log('Seed OK');
-  console.log('Login:', email);
+  await prisma.product.deleteMany({
+    where: {
+      workspaceId: workspace.id,
+      name: 'Starter License',
+      description: 'Demo license product',
+    },
+  });
+
+  console.log('Seed OK — no demo catalog');
+  console.log('Login email:', email);
+  console.log('Login name:', adminName);
   console.log('Shop slug:', storeSlug);
 }
 
