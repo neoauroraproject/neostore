@@ -3,6 +3,7 @@ name: Build and publish images
 on:
   push:
     branches: [master]
+    tags: ['v*']
   workflow_dispatch:
 
 env:
@@ -47,10 +48,16 @@ jobs:
         uses: docker/metadata-action@v5
         with:
           images: ${{ env.REGISTRY }}/${{ env.OWNER }}/${{ matrix.image }}
+          # master → latest + sha + branch
+          # tag vX.Y.Z → vX.Y.Z, X.Y.Z, X.Y, and latest (release channel)
           tags: |
             type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') }}
             type=sha,prefix=,format=short
             type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=raw,value={{tag}},enable=${{ startsWith(github.ref, 'refs/tags/v') }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -70,7 +77,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Best-effort: package may already be public or API may lack scope
           for pkg in ${{ matrix.image }}; do
             gh api --method PUT \
               -H "Accept: application/vnd.github+json" \

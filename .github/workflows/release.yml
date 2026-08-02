@@ -1,0 +1,89 @@
+name: GitHub Release from tag
+
+# Push a semver tag (v0.3.0) → create a GitHub Release with notes from docs/releases/
+# Docker images for that tag are published by the sibling "Build and publish images" workflow.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing tag to publish as a GitHub Release (e.g. v0.3.0)'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Resolve tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            TAG="${{ inputs.tag }}"
+          else
+            TAG="${GITHUB_REF_NAME}"
+          fi
+          case "$TAG" in
+            v*) ;;
+            *) echo "Tag must start with v (got: $TAG)"; exit 1 ;;
+          esac
+          echo "name=$TAG" >> "$GITHUB_OUTPUT"
+          echo "title=NeoStore ${TAG}" >> "$GITHUB_OUTPUT"
+
+      - name: Prepare release notes
+        id: notes
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          NOTES="docs/releases/${TAG}.md"
+          OUT="${RUNNER_TEMP}/release-notes.md"
+          if [ -f "$NOTES" ]; then
+            cp "$NOTES" "$OUT"
+            echo "Using $NOTES"
+          else
+            {
+              echo "## NeoStore ${TAG}"
+              echo
+              echo "Release notes file \`docs/releases/${TAG}.md\` was not found."
+              echo "Add that file on the tagged commit for a full changelog next time."
+              echo
+              echo "### Images"
+              echo
+              echo "- \`ghcr.io/neoauroraproject/neostore-api:${TAG}\`"
+              echo "- \`ghcr.io/neoauroraproject/neostore-storefront:${TAG}\`"
+              echo "- \`ghcr.io/neoauroraproject/neostore-admin:${TAG}\`"
+              echo
+              echo "### Deploy"
+              echo
+              echo '```bash'
+              echo "NEOSTORE_VERSION=${TAG} docker compose pull && docker compose up -d"
+              echo '```'
+            } > "$OUT"
+          fi
+          echo "file=$OUT" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ steps.tag.outputs.name }}"
+          TITLE="${{ steps.tag.outputs.title }}"
+          NOTES="${{ steps.notes.outputs.file }}"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release edit "$TAG" --title "$TITLE" --notes-file "$NOTES"
+            echo "Updated existing release $TAG"
+          else
+            gh release create "$TAG" \
+              --title "$TITLE" \
+              --notes-file "$NOTES" \
+              --verify-tag
+            echo "Created release $TAG"
+          fi
