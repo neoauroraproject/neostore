@@ -1,3 +1,5 @@
+'use client';
+
 import type { ChangeEvent, CSSProperties, InputHTMLAttributes } from 'react';
 
 const field: CSSProperties = {

@@ -1,3 +1,5 @@
+'use client';
+
 import type { CSSProperties, HTMLAttributes, ReactNode } from 'react';
 
 const styles: Record<string, CSSProperties> = {

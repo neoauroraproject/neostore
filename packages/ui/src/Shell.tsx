@@ -1,3 +1,5 @@
+'use client';
+
 import type { ReactNode } from 'react';
 import { Icon, type IconName } from './Icon';
 

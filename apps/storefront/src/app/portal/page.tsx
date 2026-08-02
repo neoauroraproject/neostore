@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Badge, Button, Card, EmptyState, Icon, Input, PageHeader, Skeleton } from '@neostore/ui';
-import { API_BASE } from '@/lib/catalog';
+import { getApiBase } from '@/lib/catalog';
 
 type Tab = 'home' | 'orders' | 'wallet' | 'downloads' | 'profile';
 
@@ -30,7 +30,7 @@ export default function PortalPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/customer/session`, {
+      const res = await fetch(`${getApiBase()}/customer/session`, {
         headers: { 'x-customer-session': token },
       });
       const data = await res.json();
@@ -53,7 +53,7 @@ export default function PortalPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/customer/session`, {
+      const res = await fetch(`${getApiBase()}/customer/session`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: customerToken.trim() }),
@@ -79,7 +79,7 @@ export default function PortalPage() {
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/customer/entitlements/claim`, {
+      const res = await fetch(`${getApiBase()}/customer/entitlements/claim`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -103,7 +103,7 @@ export default function PortalPage() {
 
   async function logout() {
     if (sessionToken) {
-      await fetch(`${API_BASE}/customer/logout`, {
+      await fetch(`${getApiBase()}/customer/logout`, {
         method: 'POST',
         headers: { 'x-customer-session': sessionToken },
       }).catch(() => undefined);

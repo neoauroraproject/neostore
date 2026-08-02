@@ -6,7 +6,7 @@ import { useSearchParams } from 'next/navigation';
 import { Badge, Button, Card, EmptyState, Icon, Input, PageHeader, Skeleton } from '@neostore/ui';
 import { ShopChrome } from '@/components/ShopChrome';
 import {
-  API_BASE,
+  getApiBase,
   configuredSlug,
   fetchCatalog,
   formatMoney,
@@ -52,7 +52,7 @@ export function CheckoutClient({
     setLoading(true);
     setError('');
     try {
-      const res = await fetch(`${API_BASE}/public/${encodeURIComponent(store.slug)}/order`, {
+      const res = await fetch(`${getApiBase()}/public/${encodeURIComponent(store.slug)}/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({

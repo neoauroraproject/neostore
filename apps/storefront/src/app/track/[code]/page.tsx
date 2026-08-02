@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { Badge, Button, Card, EmptyState, PageHeader, Skeleton } from '@neostore/ui';
-import { API_BASE } from '@/lib/catalog';
+import { getApiBase } from '@/lib/catalog';
 
 export default function TrackPage() {
   const params = useParams<{ code: string }>();
@@ -16,7 +16,7 @@ export default function TrackPage() {
   useEffect(() => {
     if (!code) return;
     setLoading(true);
-    fetch(`${API_BASE}/track/${encodeURIComponent(code)}`)
+    fetch(`${getApiBase()}/track/${encodeURIComponent(code)}`)
       .then(async (res) => {
         const json = await res.json();
         if (!res.ok) throw new Error(json.message || 'Not found');

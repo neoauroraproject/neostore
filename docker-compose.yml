@@ -54,6 +54,8 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: /api
+      # Server-side fetch inside the container (browser still uses /api via Caddy)
+      INTERNAL_API_URL: http://api:4100/api
       # Empty = primary shop on domain root (resolved via GET /api/public)
       STORE_SLUG: ${STORE_SLUG-}
       PORT: "4102"
@@ -70,6 +72,7 @@ services:
     restart: unless-stopped
     environment:
       NEXT_PUBLIC_API_URL: /api
+      INTERNAL_API_URL: http://api:4100/api
       PORT: "4101"
     depends_on:
       - api

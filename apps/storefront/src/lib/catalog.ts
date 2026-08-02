@@ -1,4 +1,24 @@
-export const API_BASE = process.env.NEXT_PUBLIC_API_URL || '/api';
+function serverApiBase(): string {
+  return (
+    process.env.INTERNAL_API_URL ||
+    process.env.API_URL ||
+    // Docker Compose service name
+    'http://api:4100/api'
+  );
+}
+
+/** Browser uses relative /api (via Caddy). Server must use an absolute URL. */
+export function getApiBase(): string {
+  if (typeof window === 'undefined') {
+    const pub = process.env.NEXT_PUBLIC_API_URL;
+    if (pub && /^https?:\/\//i.test(pub)) return pub.replace(/\/$/, '');
+    return serverApiBase().replace(/\/$/, '');
+  }
+  return (process.env.NEXT_PUBLIC_API_URL || '/api').replace(/\/$/, '');
+}
+
+/** @deprecated Prefer getApiBase() — absolute on server, relative in browser */
+export const API_BASE = '/api';
 
 export type PublicStore = {
   title: string;
@@ -31,7 +51,8 @@ export function configuredSlug(): string {
 }
 
 export async function fetchCatalog(slug?: string): Promise<PublicCatalog> {
-  const path = slug ? `${API_BASE}/public/${encodeURIComponent(slug)}` : `${API_BASE}/public`;
+  const base = getApiBase();
+  const path = slug ? `${base}/public/${encodeURIComponent(slug)}` : `${base}/public`;
   const res = await fetch(path, { cache: 'no-store' });
   const data = await res.json();
   if (!res.ok) {
