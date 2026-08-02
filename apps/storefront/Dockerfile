@@ -6,7 +6,9 @@ WORKDIR /app/apps/storefront
 ENV NEXT_TELEMETRY_DISABLED=1
 ARG NEXT_PUBLIC_API_URL=/api
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
-RUN npm install && npm run build
+RUN npm install \
+  && ln -sfn /app/apps/storefront/node_modules /app/node_modules \
+  && npm run build
 
 FROM node:20-alpine
 WORKDIR /app
