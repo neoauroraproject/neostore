@@ -30,8 +30,10 @@ export default function SettingsPage() {
     telegramAdminChatId: '',
     telegramBotEnabled: false,
   });
+  const [schedule, setSchedule] = useState({ timezone: 'UTC', hours: 'Mon–Fri 09:00–18:00', note: '' });
   const [botToken, setBotToken] = useState('');
   const [broadcast, setBroadcast] = useState('');
+  const [deepLink, setDeepLink] = useState('');
 
   useEffect(() => {
     if (!session?.token) return;
@@ -48,6 +50,12 @@ export default function SettingsPage() {
           telegramAdminChatId: p.telegramAdminChatId || '',
           telegramBotEnabled: Boolean(p.telegramBotEnabled),
         });
+        const ds = (p.deliverySchedule || {}) as any;
+        setSchedule({
+          timezone: ds.timezone || 'UTC',
+          hours: ds.hours || 'Mon–Fri 09:00–18:00',
+          note: ds.note || '',
+        });
       })
       .catch((e) => setError(e.message))
       .finally(() => setLoading(false));
@@ -63,7 +71,10 @@ export default function SettingsPage() {
       await api(workspacePath(workspaceId, '/profile'), {
         method: 'PATCH',
         token: session.token,
-        body: JSON.stringify(profile),
+        body: JSON.stringify({
+          ...profile,
+          deliverySchedule: schedule,
+        }),
       });
       setOk('Store profile saved.');
     } catch (err: any) {
@@ -100,6 +111,23 @@ export default function SettingsPage() {
     }
   }
 
+  async function createSellerLink() {
+    if (!session?.token) return;
+    setError('');
+    setOk('');
+    try {
+      const res = await api<any>(workspacePath(workspaceId, '/telegram/links'), {
+        method: 'POST',
+        token: session.token,
+        body: '{}',
+      });
+      setDeepLink(res.deepLink || '');
+      setOk('Open the deep link in Telegram to bind this seller chat.');
+    } catch (err: any) {
+      setError(err.message);
+    }
+  }
+
   async function sendBroadcast() {
     if (!session?.token || !broadcast.trim()) return;
     setError('');
@@ -121,7 +149,7 @@ export default function SettingsPage() {
       <PageHeader
         eyebrow="Workspace"
         title="Settings"
-        description="Store profile and Telegram bot configuration."
+        description="Store profile, delivery hours, and Telegram seller notify."
         actions={
           <Link href={`/w/${workspaceId}/homepage`}>
             <Button size="sm" variant="secondary">
@@ -142,7 +170,10 @@ export default function SettingsPage() {
               </label>
               <label style={label}>
                 Description
-                <Input value={profile.description} onChange={(e) => setProfile({ ...profile, description: e.target.value })} />
+                <Input
+                  value={profile.description}
+                  onChange={(e) => setProfile({ ...profile, description: e.target.value })}
+                />
               </label>
               <label style={label}>
                 Default currency
@@ -175,8 +206,23 @@ export default function SettingsPage() {
                 Auto-deliver delay (minutes)
                 <Input
                   value={String(profile.autoDeliverDelayMinutes)}
-                  onChange={(e) => setProfile({ ...profile, autoDeliverDelayMinutes: Number(e.target.value || 0) })}
+                  onChange={(e) =>
+                    setProfile({ ...profile, autoDeliverDelayMinutes: Number(e.target.value || 0) })
+                  }
                 />
+              </label>
+              <strong>Delivery schedule</strong>
+              <label style={label}>
+                Timezone
+                <Input value={schedule.timezone} onChange={(e) => setSchedule({ ...schedule, timezone: e.target.value })} />
+              </label>
+              <label style={label}>
+                Hours
+                <Input value={schedule.hours} onChange={(e) => setSchedule({ ...schedule, hours: e.target.value })} />
+              </label>
+              <label style={label}>
+                Note
+                <Input value={schedule.note} onChange={(e) => setSchedule({ ...schedule, note: e.target.value })} />
               </label>
               <Button type="submit" disabled={saving}>
                 {saving ? 'Saving…' : 'Save profile'}
@@ -223,6 +269,20 @@ export default function SettingsPage() {
                 {tgSaving ? 'Saving…' : 'Save Telegram'}
               </Button>
             </form>
+            <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
+              <strong>Seller deep-link</strong>
+              <p style={{ margin: 0, fontSize: 13, color: 'var(--ns-muted)' }}>
+                Bind this seller so new orders notify only linked chats (plus admin chat).
+              </p>
+              <Button variant="secondary" onClick={createSellerLink}>
+                Generate link
+              </Button>
+              {deepLink ? (
+                <a href={deepLink} style={{ color: 'var(--ns-accent)', fontWeight: 600, wordBreak: 'break-all' }}>
+                  {deepLink}
+                </a>
+              ) : null}
+            </div>
             <div style={{ marginTop: 16, display: 'grid', gap: 8 }}>
               <strong>Broadcast (intent)</strong>
               <Input value={broadcast} onChange={(e) => setBroadcast(e.target.value)} placeholder="Message to audience=all" />

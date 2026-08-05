@@ -21,6 +21,24 @@ export default function PlatformHome() {
       />
       <div style={{ display: 'grid', gap: 12, gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
         <Card>
+          <strong>Extensions</strong>
+          <p style={{ margin: '8px 0 12px', color: 'var(--ns-muted)', fontSize: 13 }}>
+            Plugins & themes — install, enable, deactivate (data kept).
+          </p>
+          <Link href="/platform/extensions">
+            <Button size="sm">Manage extensions</Button>
+          </Link>
+        </Card>
+        <Card>
+          <strong>Platform settings</strong>
+          <p style={{ margin: '8px 0 12px', color: 'var(--ns-muted)', fontSize: 13 }}>SMTP, Google OAuth, crypto assets.</p>
+          <Link href="/platform/settings">
+            <Button size="sm" variant="secondary">
+              Open settings
+            </Button>
+          </Link>
+        </Card>
+        <Card>
           <strong>Website / Homepage</strong>
           <p style={{ margin: '8px 0 12px', color: 'var(--ns-muted)', fontSize: 13 }}>
             Edit the primary shop homepage via Seller → Homepage designer for that workspace.
@@ -31,10 +49,16 @@ export default function PlatformHome() {
             </Button>
           </Link>
         </Card>
-        {['Sellers', 'Wallets', 'Payments', 'Telegram', 'Email', 'System'].map((m) => (
+        {['Sellers', 'Wallets', 'Payments', 'Telegram', 'Tickets', 'System'].map((m) => (
           <Card key={m}>
             <strong>{m}</strong>
-            <p style={{ margin: '8px 0 0', color: 'var(--ns-muted)', fontSize: 13 }}>Designed — not implemented yet</p>
+            <p style={{ margin: '8px 0 0', color: 'var(--ns-muted)', fontSize: 13 }}>
+              {m === 'Tickets' ? (
+                <Link href="/platform/tickets">Open queue</Link>
+              ) : (
+                'Designed — iterate next'
+              )}
+            </p>
           </Card>
         ))}
       </div>

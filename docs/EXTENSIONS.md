@@ -293,6 +293,23 @@ Same pattern for:
 
 ---
 
+## 16b. Phase 4 — Plugin Manager foundation (shipped)
+
+See [ARCHITECTURE-PHASE4-PLUGIN-HOST.md](./ARCHITECTURE-PHASE4-PLUGIN-HOST.md).
+
+Example skeleton: [`examples/extensions/hello-menu`](../examples/extensions/hello-menu).
+
+WordPress-like lifecycle with Host security model:
+
+- Install → Activate (workspace) → Configure → Deactivate (**keep settings**) → Uninstall (optional purge)
+- `contributes.menus` / `settings` / `webhooks` / `theme`
+- Official plugins synced to `InstalledExtension` on boot
+- Workspace enable persisted; one active theme
+- Secrets HMAC-wrapped; `ExtensionAuditLog`
+- APIs under `/api/admin/extensions` and `/api/admin/workspaces/:id/extensions`
+
+---
+
 ## 17. Acceptance (Phase 2)
 
 - [ ] No extension can write Core files or open DB  

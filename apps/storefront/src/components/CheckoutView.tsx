@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Badge, Button, Card, EmptyState, Icon, Input, PageHeader, Skeleton } from '@neostore/ui';
 import { ShopChrome } from '@/components/ShopChrome';
 import {
@@ -13,17 +13,37 @@ import {
   type PublicCatalog,
   type PublicProduct,
 } from '@/lib/catalog';
+import { getCustomerSession } from '@/lib/customer-session';
 
 type Step = 1 | 2 | 3 | 4;
 
-function enabledMethods(catalog: PublicCatalog): string[] {
+function enabledMethods(catalog: PublicCatalog, hasSession: boolean): string[] {
   const cfg = (catalog.store.paymentConfig || {}) as { methods?: Record<string, boolean> };
   const methods = cfg.methods || {};
-  const list = Object.entries(methods)
+  const fromCfg = Object.entries(methods)
     .filter(([, on]) => on)
     .map(([k]) => k);
-  return list.length ? list : ['manual_bank'];
+  const fromPlugins = (catalog.paymentGateways || []).map((g) => {
+    const id = g.id || '';
+    if (id.endsWith('.cryptomus')) return 'cryptomus';
+    if (id.endsWith('.nowpayments')) return 'nowpayments';
+    if (id.endsWith('.manual_crypto')) return 'manual_crypto';
+    if (id.endsWith('.manual_bank')) return 'manual_bank';
+    return id.replace(/^neostore\.payment\./, '');
+  });
+  const set = new Set([...fromCfg, ...fromPlugins]);
+  if (!set.size) set.add('manual_bank');
+  if (hasSession) set.add('balance');
+  return [...set];
 }
+
+const LABELS: Record<string, string> = {
+  balance: 'Wallet balance',
+  manual_bank: 'Bank transfer',
+  manual_crypto: 'Manual crypto',
+  cryptomus: 'Cryptomus',
+  nowpayments: 'NOWPayments',
+};
 
 export function CheckoutClient({
   catalog,
@@ -34,8 +54,10 @@ export function CheckoutClient({
   product: PublicProduct;
   isPrimary: boolean;
 }) {
+  const router = useRouter();
   const store = catalog.store;
-  const methods = useMemo(() => enabledMethods(catalog), [catalog]);
+  const session = typeof window !== 'undefined' ? getCustomerSession() : '';
+  const methods = useMemo(() => enabledMethods(catalog, Boolean(session)), [catalog, session]);
   const [step, setStep] = useState<Step>(1);
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -47,11 +69,18 @@ export function CheckoutClient({
 
   const base = isPrimary ? '' : `/${store.slug}`;
   const isManual = paymentMethod === 'manual_bank' || paymentMethod === 'manual_crypto';
+  const isBalance = paymentMethod === 'balance';
 
   async function submit() {
+    if (isBalance && !email.trim()) {
+      setError('Email is required when paying with balance.');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
+      const customerToken =
+        typeof window !== 'undefined' ? localStorage.getItem('ns_customer_token') || undefined : undefined;
       const res = await fetch(`${getApiBase()}/public/${encodeURIComponent(store.slug)}/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -63,6 +92,7 @@ export function CheckoutClient({
           paymentMethod,
           receiptText: isManual ? receiptText.trim() || undefined : undefined,
           currency: store.defaultCurrency || 'USD',
+          customerToken,
         }),
       });
       const data = await res.json();
@@ -72,12 +102,20 @@ export function CheckoutClient({
       }
       setResult(data);
       setStep(4);
+      const code = data.trackingCode || data.order?.trackingCode;
+      if (code && (data.paymentUrl || data.paymentIntent?.checkoutUrl)) {
+        // keep step 4 so user can open link; also offer status
+      } else if (code) {
+        router.push(`/checkout/status?code=${encodeURIComponent(code)}`);
+      }
     } catch (e: any) {
       setError(e?.message || 'Network error');
     } finally {
       setLoading(false);
     }
   }
+
+  const payUrl = result?.paymentUrl || result?.paymentIntent?.checkoutUrl || result?.intent?.url;
 
   return (
     <ShopChrome storeTitle={store.title} storeSlug={isPrimary ? '' : store.slug}>
@@ -107,8 +145,8 @@ export function CheckoutClient({
                 <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" />
               </label>
               <label style={{ display: 'grid', gap: 6, fontWeight: 600, fontSize: 13 }}>
-                Email (optional)
-                <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" />
+                Email {isBalance || !session ? '(required for balance / account)' : '(optional)'}
+                <Input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" type="email" />
               </label>
               <Button onClick={() => setStep(2)}>Continue</Button>
             </div>
@@ -134,7 +172,7 @@ export function CheckoutClient({
                     fontWeight: 600,
                   }}
                 >
-                  {m}
+                  {LABELS[m] || m}
                 </button>
               ))}
               <div style={{ display: 'flex', gap: 8 }}>
@@ -151,7 +189,8 @@ export function CheckoutClient({
           <Card padding={24}>
             <div style={{ display: 'grid', gap: 12 }}>
               <p style={{ margin: 0, color: 'var(--ns-muted)', fontSize: 14 }}>
-                {name || 'Customer'} · {paymentMethod} · {formatMoney(product, store.defaultCurrency)}
+                {name || 'Customer'} · {LABELS[paymentMethod] || paymentMethod} ·{' '}
+                {formatMoney(product, store.defaultCurrency)}
               </p>
               {isManual ? (
                 <label style={{ display: 'grid', gap: 6, fontWeight: 600, fontSize: 13 }}>
@@ -162,9 +201,13 @@ export function CheckoutClient({
                     placeholder="Transaction id or bank transfer note"
                   />
                 </label>
+              ) : isBalance ? (
+                <p style={{ margin: 0, fontSize: 14, color: 'var(--ns-muted)' }}>
+                  We will debit your wallet balance immediately after placing the order.
+                </p>
               ) : (
                 <p style={{ margin: 0, fontSize: 14, color: 'var(--ns-muted)' }}>
-                  Gateway checkout will return a payment intent from the API.
+                  You will be redirected to the payment gateway after placing the order.
                 </p>
               )}
               {error ? <p style={{ color: 'var(--ns-danger)', margin: 0 }}>{error}</p> : null}
@@ -195,27 +238,32 @@ export function CheckoutClient({
                 {result.trackingCode || result.order?.trackingCode || '—'}
               </Link>
             </p>
-            {result.customer?.token || result.order?.customer?.token ? (
-              <p style={{ margin: '0 0 12px', fontSize: 13, color: 'var(--ns-muted)' }}>
-                Customer token (portal): {result.customer?.token || result.order?.customer?.token}
+            {result.waitForSeller ? (
+              <p style={{ margin: '0 0 12px', color: 'var(--ns-muted)', fontSize: 14 }}>
+                Manual delivery — seller has ~{result.slaMinutes || store.manualDeliverSlaMinutes || 60} minutes to fulfill.
+                Overdue orders auto-refund to wallet.
               </p>
-            ) : null}
-            {result.paymentUrl || result.intent?.url ? (
+            ) : (
+              <p style={{ margin: '0 0 12px', color: 'var(--ns-muted)', fontSize: 14 }}>
+                Instant or hybrid products deliver automatically when payment clears.
+              </p>
+            )}
+            {payUrl ? (
               <p style={{ margin: '0 0 12px' }}>
-                <a href={result.paymentUrl || result.intent?.url} style={{ color: 'var(--ns-accent)', fontWeight: 600 }}>
+                <a href={payUrl} style={{ color: 'var(--ns-accent)', fontWeight: 600 }}>
                   Open payment link
                 </a>
               </p>
             ) : null}
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <Link href={`/checkout/status?code=${result.trackingCode || result.order?.trackingCode}`}>
+                <Button>Verify payment</Button>
+              </Link>
               <Link href={`/track/${result.trackingCode || result.order?.trackingCode}`}>
-                <Button>Track order</Button>
+                <Button variant="secondary">Track order</Button>
               </Link>
               <Link href="/portal">
-                <Button variant="secondary">Portal</Button>
-              </Link>
-              <Link href={base || '/'}>
-                <Button variant="ghost">Back to shop</Button>
+                <Button variant="ghost">Portal</Button>
               </Link>
             </div>
           </Card>

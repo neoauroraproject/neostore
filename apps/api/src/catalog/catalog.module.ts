@@ -88,6 +88,9 @@ export class CatalogService {
         telegramAdminChatId: data.telegramAdminChatId as string | undefined,
         homepageConfig: data.homepageConfig as object | undefined,
         branding: data.branding as object | undefined,
+        themeId: data.themeId as string | undefined,
+        themeConfig: data.themeConfig as object | undefined,
+        deliverySchedule: data.deliverySchedule as object | undefined,
         manualDeliverSlaMinutes:
           data.manualDeliverSlaMinutes != null ? Number(data.manualDeliverSlaMinutes) : undefined,
       },
@@ -229,6 +232,8 @@ export class CatalogService {
         imageUrl: (body.imageUrl as string) || null,
         deliverWithinMinutes:
           body.deliverWithinMinutes != null ? Number(body.deliverWithinMinutes) : null,
+        priceBase: String(body.priceBase || 'USD'),
+        acceptedAssets: (body.acceptedAssets as object) || [],
         typeFields: (body.typeFields as object) || {},
       },
     });
@@ -254,6 +259,8 @@ export class CatalogService {
         deliveryMode: body.deliveryMode as DeliveryMode | undefined,
         deliverWithinMinutes:
           body.deliverWithinMinutes != null ? Number(body.deliverWithinMinutes) : undefined,
+        priceBase: body.priceBase != null ? String(body.priceBase) : undefined,
+        acceptedAssets: body.acceptedAssets != null ? (body.acceptedAssets as object) : undefined,
         blueprintId: body.blueprintId != null ? String(body.blueprintId) : undefined,
         categoryId: body.categoryId != null ? String(body.categoryId) : undefined,
       },
@@ -295,9 +302,11 @@ export class CatalogService {
     paymentConfig: unknown;
     homepageConfig?: unknown;
     branding?: unknown;
+    themeId?: string | null;
+    themeConfig?: unknown;
     manualDeliverSlaMinutes?: number;
   }) {
-    const [categories, products] = await Promise.all([
+    const [categories, products, platform] = await Promise.all([
       this.prisma.category.findMany({
         where: { workspaceId: store.workspaceId, visible: true, enabled: true },
         orderBy: { sortOrder: 'asc' },
@@ -307,7 +316,17 @@ export class CatalogService {
         include: { category: true },
         orderBy: [{ featured: 'desc' }, { sortOrder: 'asc' }],
       }),
+      this.prisma.platformSettings.findUnique({ where: { id: 'default' } }),
     ]);
+    const platformValue = (platform?.value || {}) as {
+      cryptoAssets?: unknown[];
+      fxBase?: string;
+      googleOAuth?: { enabledForCustomers?: boolean; clientId?: string };
+    };
+    const homepageConfig = {
+      ...((store.homepageConfig || {}) as object),
+      ...((store.themeConfig || {}) as object),
+    };
     return {
       store: {
         title: store.title,
@@ -315,10 +334,16 @@ export class CatalogService {
         description: store.description,
         defaultCurrency: store.defaultCurrency,
         paymentConfig: store.paymentConfig,
-        homepageConfig: store.homepageConfig ?? {},
+        homepageConfig,
         branding: store.branding ?? {},
+        themeId: store.themeId || 'neostore.theme.marketplace',
         manualDeliverSlaMinutes: store.manualDeliverSlaMinutes ?? 60,
         workspaceId: store.workspaceId,
+        cryptoAssets: platformValue.cryptoAssets || [],
+        fxBase: platformValue.fxBase || 'USD',
+        googleAuthEnabled: Boolean(
+          platformValue.googleOAuth?.enabledForCustomers && platformValue.googleOAuth?.clientId,
+        ),
       },
       categories,
       products: products.map((p) => ({
@@ -326,7 +351,7 @@ export class CatalogService {
         quotaUnits: p.quotaUnits.toString(),
       })),
       productTypes: this.host.list('product_type'),
-      paymentGateways: this.host.list('payment_gateway'),
+      paymentGateways: this.host.listEnabledPayments(store.workspaceId),
     };
   }
 }

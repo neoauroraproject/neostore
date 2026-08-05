@@ -27,6 +27,38 @@ export default function AdminHome() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const googleToken = params.get('google_token');
+    if (googleToken) {
+      void (async () => {
+        try {
+          const me = await fetch(`${API}/auth/me`, {
+            headers: { Authorization: `Bearer ${googleToken}` },
+          }).then((r) => r.json());
+          const workspaces = (me.workspaces || []).map((w: any) => ({
+            id: w.id,
+            name: w.name,
+            slug: w.slug || w.store?.slug,
+          }));
+          const s: AuthSession = {
+            token: googleToken,
+            role: me.user?.role || me.role,
+            email: me.user?.email || me.email,
+            name: me.user?.name || me.name,
+            workspaces,
+          };
+          saveSession(s);
+          setSession(s);
+          const ctx = loadContext(s);
+          setContext(ctx);
+          window.history.replaceState({}, '', '/');
+          void hydrate(s, ctx);
+        } catch {
+          setError('Google sign-in failed');
+        }
+      })();
+      return;
+    }
     const s = loadSession();
     if (s) {
       setSession(s);

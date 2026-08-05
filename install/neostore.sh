@@ -252,6 +252,8 @@ compose_pull_up() {
   fi
   log "Starting stack (no local build)..."
   compose up -d --remove-orphans
+  log "Pruning unused Docker images..."
+  docker image prune -f >/dev/null 2>&1 || true
 }
 
 ensure_version_in_env() {

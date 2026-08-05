@@ -11,6 +11,10 @@ import { TelegramModule } from './telegram/telegram.module';
 import { AnalyticsModule } from './analytics/analytics.module';
 import { MediaModule } from './media/media.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { PlatformModule } from './platform/platform.module';
+import { MailerModule } from './mailer/mailer.module';
+import { TicketsModule } from './tickets/tickets.module';
+import { GoogleOAuthModule } from './oauth/google-oauth.module';
 
 @Module({
   imports: [
@@ -26,6 +30,10 @@ import { InventoryModule } from './inventory/inventory.module';
     AnalyticsModule,
     MediaModule,
     InventoryModule,
+    PlatformModule,
+    MailerModule,
+    TicketsModule,
+    GoogleOAuthModule,
   ],
 })
 export class AppModule {}

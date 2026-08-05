@@ -1,6 +1,7 @@
 'use client';
 
 import type { ChangeEvent, CSSProperties, InputHTMLAttributes } from 'react';
+import { forwardRef } from 'react';
 
 const field: CSSProperties = {
   width: '100%',
@@ -16,9 +17,13 @@ const field: CSSProperties = {
 
 export type InputProps = InputHTMLAttributes<HTMLInputElement>;
 
-export function Input({ style, onFocus, onBlur, onChange, ...rest }: InputProps) {
+export const Input = forwardRef<HTMLInputElement, InputProps>(function Input(
+  { style, onFocus, onBlur, onChange, ...rest },
+  ref,
+) {
   return (
     <input
+      ref={ref}
       style={{ ...field, ...style }}
       onFocus={(e) => {
         e.currentTarget.style.borderColor = 'var(--ns-focus)';
@@ -34,4 +39,4 @@ export function Input({ style, onFocus, onBlur, onChange, ...rest }: InputProps)
       {...rest}
     />
   );
-}
+});

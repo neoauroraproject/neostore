@@ -59,11 +59,15 @@ export function StoreShell({
   children,
   navItems,
   topRight,
+  midNav,
+  searchSlot,
 }: {
   brand: ReactNode;
   children: ReactNode;
   navItems: BottomNavItem[];
   topRight?: ReactNode;
+  midNav?: ReactNode;
+  searchSlot?: ReactNode;
 }) {
   return (
     <>
@@ -82,10 +86,18 @@ export function StoreShell({
       >
         <div
           className="ns-container"
-          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, width: '100%' }}
+          style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 16, width: 'min(100% - 2rem, var(--ns-max))' }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0 }}>{brand}</div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>{topRight}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, minWidth: 0, flex: 1 }}>{brand}</div>
+          {midNav ? (
+            <nav className="ns-desktop-only" style={{ display: 'none', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              {midNav}
+            </nav>
+          ) : null}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+            {searchSlot}
+            {topRight}
+          </div>
         </div>
       </header>
       <div className="ns-page">{children}</div>
@@ -94,6 +106,7 @@ export function StoreShell({
         @media (min-width: 900px) {
           .ns-bottom-nav { display: none !important; }
           .ns-page { padding-bottom: var(--ns-space-16) !important; }
+          .ns-desktop-only { display: flex !important; }
         }
       `}</style>
     </>

@@ -27,8 +27,13 @@ export type PublicStore = {
   defaultCurrency?: string;
   paymentConfig?: unknown;
   homepageConfig?: unknown;
-  branding?: unknown;
+  branding?: { theme?: string; logoUrl?: string } | unknown;
+  themeId?: string;
   workspaceId?: string;
+  cryptoAssets?: Array<{ id: string; symbol: string; network: string; label: string; rateToUsd?: number }>;
+  fxBase?: string;
+  googleAuthEnabled?: boolean;
+  manualDeliverSlaMinutes?: number;
 };
 
 export type PublicProduct = {
@@ -40,14 +45,21 @@ export type PublicProduct = {
   priceToman?: number | string | null;
   featured?: boolean;
   imageUrl?: string | null;
+  priceBase?: string;
+  acceptedAssets?: string[] | unknown;
+  typeFields?: Record<string, unknown>;
   categoryId?: string | null;
   category?: { id: string; name: string } | null;
+  deliveryMode?: string;
+  stockCount?: number;
+  stockUnlimited?: boolean;
 };
 
 export type PublicCatalog = {
   store: PublicStore;
   categories: { id: string; name: string; description?: string | null; icon?: string | null }[];
   products: PublicProduct[];
+  paymentGateways?: Array<{ id: string; name?: string; type?: string }>;
 };
 
 export function configuredSlug(): string {

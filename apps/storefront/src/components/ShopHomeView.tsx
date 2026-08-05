@@ -23,6 +23,7 @@ type HomepageConfig = {
   featuredMode?: 'featured' | 'all' | 'manualIds';
   featuredProductIds?: string[];
   showSearch?: boolean;
+  topMenu?: { id?: string; label: string; href: string; visible?: boolean }[];
 };
 
 function pickFeatured(products: PublicProduct[], cfg: HomepageConfig) {
@@ -66,31 +67,25 @@ export function ShopHomeView({
           ? ctaHrefRaw
           : searchHref(store.slug, isPrimary);
 
-  return (
-    <ShopChrome storeTitle={store.title} storeSlug={isPrimary ? '' : store.slug}>
-      <section className="ns-container ns-fade-up" style={{ paddingTop: 20, display: 'grid', gap: 18 }}>
-        {showSearch ? (
-          <form action={searchHref(store.slug, isPrimary)} method="get" style={{ display: 'grid' }}>
-            <div style={{ position: 'relative' }}>
-              <span style={{ position: 'absolute', left: 14, top: '50%', transform: 'translateY(-50%)', color: 'var(--ns-muted)' }}>
-                <Icon name="search" size={18} />
-              </span>
-              <Input
-                name="q"
-                placeholder={`Search ${store.title}…`}
-                style={{ height: 48, paddingLeft: 42, borderRadius: 14, fontSize: 15 }}
-              />
-            </div>
-          </form>
-        ) : null}
+  const branding = (store.branding || {}) as { theme?: string };
+  const themeClass = branding.theme === 'crypto-dark' ? 'ns-theme-crypto-dark' : undefined;
 
+  return (
+    <ShopChrome
+      storeTitle={store.title}
+      storeSlug={isPrimary ? '' : store.slug}
+      topMenu={cfg.topMenu || []}
+      themeClass={themeClass}
+    >
+      <section className="ns-container ns-reveal" style={{ paddingTop: 20, display: 'grid', gap: 18 }}>
+        {/* Search lives in expandable header */}
         <div
           style={{
             position: 'relative',
             overflow: 'hidden',
             borderRadius: 'var(--ns-radius-xl)',
             background:
-              'radial-gradient(120% 120% at 0% 0%, #ccfbf1 0%, transparent 45%), radial-gradient(90% 80% at 100% 10%, #e2e8f0 0%, transparent 40%), linear-gradient(160deg, #0b0f14 0%, #1c2430 55%, #134e4a 100%)',
+              'radial-gradient(120% 120% at 0% 0%, rgba(45,212,191,0.25) 0%, transparent 45%), linear-gradient(160deg, #0b0f14 0%, #1c2430 55%, #134e4a 100%)',
             color: '#fff',
             padding: 'clamp(24px, 4vw, 40px)',
             minHeight: 220,
@@ -98,6 +93,7 @@ export function ShopHomeView({
             alignContent: 'end',
             gap: 12,
           }}
+          className="ns-glow-line"
         >
           <h1
             style={{
@@ -197,12 +193,7 @@ export function ShopHomeView({
           <EmptyState
             icon="bag"
             title="No products yet"
-            description="Open Admin to add your first product to this shop."
-            action={
-              <Link href="/admin">
-                <Button>Open Admin</Button>
-              </Link>
-            }
+            description="This shop has an empty catalog. Check back soon."
           />
         ) : (
           <div

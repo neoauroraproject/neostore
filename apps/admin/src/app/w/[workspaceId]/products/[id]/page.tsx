@@ -29,7 +29,15 @@ export default function EditProductPage() {
     status: 'active',
     imageUrl: '',
     deliverWithinMinutes: '',
+    priceBase: 'USD',
+    acceptedAssets: [] as string[],
   });
+
+  const ASSETS = [
+    { id: 'USDT_TRC20', label: 'USDT (TRC20)' },
+    { id: 'USDT_BEP20', label: 'USDT (BEP20)' },
+    { id: 'USDC_POLYGON', label: 'USDC (Polygon)' },
+  ];
 
   useEffect(() => {
     if (!session?.token) return;
@@ -47,6 +55,8 @@ export default function EditProductPage() {
           status: p.status || 'active',
           imageUrl: p.imageUrl || '',
           deliverWithinMinutes: p.deliverWithinMinutes != null ? String(p.deliverWithinMinutes) : '',
+          priceBase: p.priceBase || 'USD',
+          acceptedAssets: Array.isArray(p.acceptedAssets) ? p.acceptedAssets : [],
         });
       })
       .catch((e) => setError(e.message))
@@ -94,6 +104,8 @@ export default function EditProductPage() {
           status: form.status,
           imageUrl: form.imageUrl || null,
           deliverWithinMinutes: form.deliverWithinMinutes ? Number(form.deliverWithinMinutes) : null,
+          priceBase: form.priceBase || 'USD',
+          acceptedAssets: form.acceptedAssets,
         }),
       });
       router.push(`/w/${workspaceId}/products`);
@@ -164,6 +176,35 @@ export default function EditProductPage() {
                 placeholder="Store default if empty"
               />
             </label>
+            <label style={fieldLabel}>
+              Price base
+              <select
+                value={form.priceBase}
+                onChange={(e) => setForm({ ...form, priceBase: e.target.value })}
+                style={{ height: 44, borderRadius: 12, border: '1px solid var(--ns-border)', padding: '0 12px' }}
+              >
+                <option value="USD">USD</option>
+                <option value="USDT">USDT</option>
+              </select>
+            </label>
+            <div style={{ display: 'grid', gap: 8 }}>
+              <strong style={{ fontSize: 13 }}>Accepted crypto assets</strong>
+              {ASSETS.map((a) => (
+                <label key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.acceptedAssets.includes(a.id)}
+                    onChange={(e) => {
+                      const set = new Set(form.acceptedAssets);
+                      if (e.target.checked) set.add(a.id);
+                      else set.delete(a.id);
+                      setForm({ ...form, acceptedAssets: [...set] });
+                    }}
+                  />
+                  {a.label}
+                </label>
+              ))}
+            </div>
             <label style={fieldLabel}>
               Status
               <select

@@ -21,6 +21,9 @@ import { hashToken, newRawToken } from '../auth/auth.module';
 import { WorkspaceGuardService } from '../catalog/catalog.module';
 import { CatalogModule } from '../catalog/catalog.module';
 import { OrdersModule } from '../orders/orders.module';
+import * as bcrypt from 'bcryptjs';
+import { MailerModule, MailerService } from '../mailer/mailer.module';
+import { WalletModule, WalletService } from '../wallet/wallet.module';
 
 const SESSION_DAYS = 14;
 
@@ -29,7 +32,164 @@ export class PortalService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly events: EventBus,
+    private readonly mailer: MailerService,
+    private readonly wallet: WalletService,
   ) {}
+
+  private async issueSession(customer: { id: string }) {
+    const raw = newRawToken(32);
+    const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400000);
+    await this.prisma.customerSession.create({
+      data: {
+        customerId: customer.id,
+        tokenHash: hashToken(raw),
+        expiresAt,
+      },
+    });
+    await this.prisma.customer.update({
+      where: { id: customer.id },
+      data: { lastSeenAt: new Date() },
+    });
+    const full = await this.prisma.customer.findUniqueOrThrow({ where: { id: customer.id } });
+    return { sessionToken: raw, expiresAt, customer: this.publicCustomer(full) };
+  }
+
+  async registerWithPassword(slug: string, body: { email: string; password: string; name?: string }) {
+    const store = await this.prisma.storeProfile.findUnique({ where: { slug } });
+    if (!store?.enabled) throw new NotFoundException('Store not found');
+    const email = String(body.email || '').trim().toLowerCase();
+    const password = String(body.password || '');
+    if (!email || password.length < 6) throw new BadRequestException('Valid email and password (6+) required');
+    const existing = await this.prisma.customer.findFirst({
+      where: { workspaceId: store.workspaceId, email },
+    });
+    if (existing?.passwordHash) throw new BadRequestException('Account already exists');
+    const passwordHash = await bcrypt.hash(password, 10);
+    const token = `NS-${newRawToken(3).slice(0, 4)}-${newRawToken(3).slice(0, 4)}-${newRawToken(3).slice(0, 4)}`.toUpperCase();
+    const customer = existing
+      ? await this.prisma.customer.update({
+          where: { id: existing.id },
+          data: { passwordHash, name: body.name || existing.name },
+        })
+      : await this.prisma.customer.create({
+          data: {
+            workspaceId: store.workspaceId,
+            token,
+            email,
+            name: body.name || null,
+            passwordHash,
+          },
+        });
+    await this.events.emit('CustomerRegistered', { customerId: customer.id, workspaceId: store.workspaceId });
+    void this.mailer.send({
+      to: email,
+      subject: `Welcome to ${store.title}`,
+      text: `Your account on ${store.title} is ready.`,
+    });
+    return this.issueSession(customer);
+  }
+
+  async loginWithPassword(slug: string, body: { email: string; password: string }) {
+    const store = await this.prisma.storeProfile.findUnique({ where: { slug } });
+    if (!store?.enabled) throw new NotFoundException('Store not found');
+    const email = String(body.email || '').trim().toLowerCase();
+    const customer = await this.prisma.customer.findFirst({
+      where: { workspaceId: store.workspaceId, email },
+    });
+    if (!customer?.passwordHash) throw new UnauthorizedException('Invalid credentials');
+    const ok = await bcrypt.compare(String(body.password || ''), customer.passwordHash);
+    if (!ok) throw new UnauthorizedException('Invalid credentials');
+    return this.issueSession(customer);
+  }
+
+  async loginOrRegisterGoogle(
+    slug: string,
+    body: { googleSub: string; email: string; name?: string },
+  ) {
+    const store = await this.prisma.storeProfile.findUnique({ where: { slug } });
+    if (!store?.enabled) throw new NotFoundException('Store not found');
+    const email = body.email.trim().toLowerCase();
+    let customer = await this.prisma.customer.findFirst({
+      where: {
+        workspaceId: store.workspaceId,
+        OR: [{ googleSub: body.googleSub }, { email }],
+      },
+    });
+    if (!customer) {
+      const token = `NS-${newRawToken(3).slice(0, 4)}-${newRawToken(3).slice(0, 4)}-${newRawToken(3).slice(0, 4)}`.toUpperCase();
+      customer = await this.prisma.customer.create({
+        data: {
+          workspaceId: store.workspaceId,
+          token,
+          email,
+          name: body.name || null,
+          googleSub: body.googleSub,
+        },
+      });
+      await this.events.emit('CustomerRegistered', { customerId: customer.id, workspaceId: store.workspaceId });
+    } else if (!customer.googleSub) {
+      customer = await this.prisma.customer.update({
+        where: { id: customer.id },
+        data: { googleSub: body.googleSub, name: customer.name || body.name || null },
+      });
+    }
+    return this.issueSession(customer);
+  }
+
+  async changePassword(sessionToken: string, body: { currentPassword?: string; newPassword: string }) {
+    const customer = await this.customerFromSession(sessionToken);
+    const next = String(body.newPassword || '');
+    if (next.length < 6) throw new BadRequestException('Password must be 6+ characters');
+    if (customer.passwordHash) {
+      const ok = await bcrypt.compare(String(body.currentPassword || ''), customer.passwordHash);
+      if (!ok) throw new UnauthorizedException('Current password incorrect');
+    }
+    const passwordHash = await bcrypt.hash(next, 10);
+    await this.prisma.customer.update({ where: { id: customer.id }, data: { passwordHash } });
+    return { ok: true };
+  }
+
+  async updateProfile(sessionToken: string, body: { name?: string; email?: string }) {
+    const customer = await this.customerFromSession(sessionToken);
+    return this.publicCustomer(
+      await this.prisma.customer.update({
+        where: { id: customer.id },
+        data: {
+          name: body.name != null ? String(body.name) : undefined,
+          email: body.email != null ? String(body.email).trim().toLowerCase() : undefined,
+        },
+      }),
+    );
+  }
+
+  async financial(sessionToken: string) {
+    const customer = await this.customerFromSession(sessionToken);
+    const accounts = await this.prisma.ledgerAccount.findMany({
+      where: { customerId: customer.id, kind: 'customer_wallet' },
+    });
+    const balances = [];
+    for (const a of accounts) {
+      const agg = await this.prisma.ledgerEntry.aggregate({
+        where: { accountId: a.id },
+        _sum: { amount: true },
+      });
+      balances.push({
+        currency: a.currency,
+        balance: agg._sum.amount || 0,
+        accountId: a.id,
+      });
+    }
+    if (!balances.length) {
+      const bal = await this.wallet.balance(customer.id, 'USD');
+      balances.push(bal);
+    }
+    const entries = await this.prisma.ledgerEntry.findMany({
+      where: { account: { customerId: customer.id } },
+      orderBy: { createdAt: 'desc' },
+      take: 100,
+    });
+    return { balances, entries };
+  }
 
   private async customerFromSession(raw?: string) {
     if (!raw) throw new UnauthorizedException('Missing x-customer-session');
@@ -51,20 +211,7 @@ export class PortalService {
   async loginWithToken(token: string) {
     const customer = await this.prisma.customer.findUnique({ where: { token } });
     if (!customer) throw new NotFoundException('Customer not found');
-    const raw = newRawToken(32);
-    const expiresAt = new Date(Date.now() + SESSION_DAYS * 86400000);
-    await this.prisma.customerSession.create({
-      data: {
-        customerId: customer.id,
-        tokenHash: hashToken(raw),
-        expiresAt,
-      },
-    });
-    await this.prisma.customer.update({
-      where: { id: customer.id },
-      data: { lastSeenAt: new Date() },
-    });
-    return { sessionToken: raw, expiresAt, customer: this.publicCustomer(customer) };
+    return this.issueSession(customer);
   }
 
   async dashboard(sessionToken: string) {
@@ -365,6 +512,27 @@ export class PortalController {
     return this.portal.dashboard(session);
   }
 
+  @Get('financial')
+  financial(@Headers('x-customer-session') session: string) {
+    return this.portal.financial(session);
+  }
+
+  @Post('profile')
+  updateProfile(
+    @Headers('x-customer-session') session: string,
+    @Body() body: { name?: string; email?: string },
+  ) {
+    return this.portal.updateProfile(session, body);
+  }
+
+  @Post('security/password')
+  changePassword(
+    @Headers('x-customer-session') session: string,
+    @Body() body: { currentPassword?: string; newPassword: string },
+  ) {
+    return this.portal.changePassword(session, body);
+  }
+
   @Post('logout')
   logout(@Headers('x-customer-session') session: string) {
     return this.portal.logout(session);
@@ -378,6 +546,21 @@ export class PortalController {
   @Post('entitlements/:id/hide')
   hide(@Headers('x-customer-session') session: string, @Param('id') id: string) {
     return this.portal.hide(session, id);
+  }
+}
+
+@Controller('public/:slug/auth')
+export class PublicCustomerAuthController {
+  constructor(private readonly portal: PortalService) {}
+
+  @Post('register')
+  register(@Param('slug') slug: string, @Body() body: { email: string; password: string; name?: string }) {
+    return this.portal.registerWithPassword(slug, body);
+  }
+
+  @Post('login')
+  login(@Param('slug') slug: string, @Body() body: { email: string; password: string }) {
+    return this.portal.loginWithPassword(slug, body);
   }
 }
 
@@ -417,9 +600,14 @@ export class CustomersAdminController {
 }
 
 @Module({
-  imports: [CatalogModule, OrdersModule],
+  imports: [CatalogModule, OrdersModule, MailerModule, WalletModule],
   providers: [PortalService, CustomersAdminService],
-  controllers: [PortalController, TelegramPublicController, CustomersAdminController],
+  controllers: [
+    PortalController,
+    PublicCustomerAuthController,
+    TelegramPublicController,
+    CustomersAdminController,
+  ],
   exports: [PortalService, CustomersAdminService],
 })
 export class PortalModule {}

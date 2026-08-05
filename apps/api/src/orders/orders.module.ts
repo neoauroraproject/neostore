@@ -105,15 +105,20 @@ export class OrdersService {
       telegram: body.telegram as string | undefined,
     });
 
-    const method = String(body.paymentMethod || 'manual_bank');
-    const gatewayId =
-      method === 'cryptomus'
-        ? 'neostore.payment.cryptomus'
-        : method === 'manual_crypto'
-          ? 'neostore.payment.manual_crypto'
-          : 'neostore.payment.manual_bank';
-    const gateway = this.host.getPayment(gatewayId);
-    if (!gateway) throw new BadRequestException('Payment gateway extension not enabled');
+    const methodRaw = String(body.paymentMethod || 'manual_bank');
+    const method = methodRaw === 'wallet_balance' ? 'balance' : methodRaw;
+    const methodToGateway: Record<string, string> = {
+      manual_bank: 'neostore.payment.manual_bank',
+      manual_crypto: 'neostore.payment.manual_crypto',
+      cryptomus: 'neostore.payment.cryptomus',
+      nowpayments: 'neostore.payment.nowpayments',
+    };
+    const isBalance = method === 'balance';
+    const gatewayId = methodToGateway[method] || '';
+    const gateway = isBalance ? null : this.host.getPayment(gatewayId, store.workspaceId);
+    if (!isBalance && !gateway) {
+      throw new BadRequestException('Payment gateway extension not enabled');
+    }
 
     const hasReceipt = Boolean(body.receiptText || body.receiptImage);
     const isManual = method === 'manual_bank' || method === 'manual_crypto';
@@ -165,7 +170,7 @@ export class OrdersService {
         timeline: {
           create: {
             status: 'CREATED',
-            message: 'Order created',
+            message: isBalance ? 'Order created — paying with wallet balance' : 'Order created',
             actor: 'customer',
           },
         },
@@ -173,21 +178,31 @@ export class OrdersService {
       include: { payment: true, customer: true },
     });
 
-    const intent = await gateway.createIntent?.(this.host.context(store.workspaceId), {
-      orderId: order.id,
-      amount: order.amount,
-      currency: order.currency,
-      trackingCode,
-    });
+    const intent = gateway
+      ? await gateway.createIntent?.(this.host.context(store.workspaceId, gatewayId), {
+          orderId: order.id,
+          amount: order.amount,
+          currency: order.currency,
+          trackingCode,
+        })
+      : { method: 'balance', status: 'pending' };
 
-    if (method === 'cryptomus') {
-      // awaiting webhook
-    } else if (isManual && hasReceipt) {
-      // awaiting admin / auto-deliver
+    if (isBalance) {
+      await this.wallet.purchase(customer.id, order.amount, order.currency, { refType: 'order', refId: order.id });
+      await this.prisma.payment.update({
+        where: { id: order.payment!.id },
+        data: { status: PaymentStatus.APPROVED, reviewedAt: new Date(), reviewedBy: 'customer:wallet' },
+      });
+      await this.approve('system', store.workspaceId, order.id);
     }
 
     await this.events.emit('OrderCreated', { orderId: order.id, workspaceId: store.workspaceId });
     await this.hooks.run('afterOrderCreate', { orderId: order.id });
+
+    const checkoutUrl =
+      (intent as { checkoutUrl?: string; url?: string } | null)?.checkoutUrl ||
+      (intent as { url?: string } | null)?.url ||
+      null;
 
     return {
       order: {
@@ -199,6 +214,10 @@ export class OrdersService {
         customerToken: customer.token,
       },
       paymentIntent: intent || null,
+      paymentUrl: checkoutUrl,
+      trackingCode: order.trackingCode,
+      waitForSeller: product.deliveryMode === DeliveryMode.manual,
+      slaMinutes: product.deliverWithinMinutes || store.manualDeliverSlaMinutes || 60,
     };
   }
 
@@ -480,6 +499,17 @@ export class OrdersService {
   }
 
   async cryptomusWebhook(body: Record<string, unknown>) {
+    return this.paymentWebhook('neostore.payment.cryptomus', body);
+  }
+
+  async nowpaymentsWebhook(body: Record<string, unknown>) {
+    return this.paymentWebhook('neostore.payment.nowpayments', {
+      ...body,
+      order_id: body.order_id || body.orderId || body.order_description,
+    });
+  }
+
+  private async paymentWebhook(gatewayId: string, body: Record<string, unknown>) {
     const orderId = String(body.order_id || body.orderId || '');
     if (!orderId) throw new BadRequestException('order_id required');
     const order = await this.prisma.order.findUnique({
@@ -487,8 +517,8 @@ export class OrdersService {
       include: { payment: true },
     });
     if (!order) throw new NotFoundException('Order not found');
-    const gateway = this.host.getPayment('neostore.payment.cryptomus');
-    const verified = await gateway?.verify?.(this.host.context(order.workspaceId), body);
+    const gateway = this.host.getPayment(gatewayId, order.workspaceId);
+    const verified = await gateway?.verify?.(this.host.context(order.workspaceId, gatewayId), body);
     if (!verified?.ok) return { ok: false };
     if (order.payment) {
       await this.prisma.payment.update({
@@ -622,6 +652,16 @@ export class CryptomusWebhookController {
   }
 }
 
+@Controller('webhooks/nowpayments')
+export class NowPaymentsWebhookController {
+  constructor(private readonly orders: OrdersService) {}
+
+  @Post()
+  hook(@Body() body: Record<string, unknown>) {
+    return this.orders.nowpaymentsWebhook(body);
+  }
+}
+
 @Controller('admin/workspaces/:workspaceId/orders')
 @UseGuards(AuthGuard('jwt'))
 export class OrdersAdminController {
@@ -704,6 +744,7 @@ import { WalletModule } from '../wallet/wallet.module';
     CheckoutController,
     TrackController,
     CryptomusWebhookController,
+    NowPaymentsWebhookController,
     OrdersAdminController,
   ],
   exports: [OrdersService],

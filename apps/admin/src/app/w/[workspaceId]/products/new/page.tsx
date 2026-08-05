@@ -42,7 +42,14 @@ export default function NewProductPage() {
     imageUrl: '',
     featured: false,
     visible: true,
+    priceBase: 'USD',
+    acceptedAssets: ['USDT_TRC20', 'USDT_BEP20', 'USDC_POLYGON'] as string[],
   });
+  const ASSETS = [
+    { id: 'USDT_TRC20', label: 'USDT (TRC20)' },
+    { id: 'USDT_BEP20', label: 'USDT (BEP20)' },
+    { id: 'USDC_POLYGON', label: 'USDC (Polygon)' },
+  ];
 
   useEffect(() => {
     if (!session?.token) return;
@@ -157,6 +164,8 @@ export default function NewProductPage() {
           deliverWithinMinutes:
             form.deliveryMode === 'manual' ? Number(form.deliverWithinMinutes || 60) : null,
           stockUnlimited: form.deliveryMode !== 'instant',
+          priceBase: form.priceBase || 'USD',
+          acceptedAssets: form.acceptedAssets,
         }),
       });
       router.push(`/w/${workspaceId}/products`);
@@ -274,6 +283,24 @@ export default function NewProductPage() {
                 />
               </label>
             )}
+            <div style={{ display: 'grid', gap: 8 }}>
+              <strong style={{ fontSize: 13 }}>Accepted crypto assets</strong>
+              {ASSETS.map((a) => (
+                <label key={a.id} style={{ display: 'flex', gap: 8, alignItems: 'center', fontSize: 14 }}>
+                  <input
+                    type="checkbox"
+                    checked={form.acceptedAssets.includes(a.id)}
+                    onChange={(e) => {
+                      const set = new Set(form.acceptedAssets);
+                      if (e.target.checked) set.add(a.id);
+                      else set.delete(a.id);
+                      setForm({ ...form, acceptedAssets: [...set] });
+                    }}
+                  />
+                  {a.label}
+                </label>
+              ))}
+            </div>
             <label style={fieldLabel}>
               Category
               <select

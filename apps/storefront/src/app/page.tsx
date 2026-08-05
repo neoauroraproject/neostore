@@ -18,8 +18,8 @@ export default async function HomePage() {
           title="Store unavailable"
           description={e?.message || 'Could not load the primary shop.'}
           action={
-            <Link href="/admin">
-              <Button>Open Admin</Button>
+            <Link href="/login">
+              <Button>Sign in</Button>
             </Link>
           }
         />

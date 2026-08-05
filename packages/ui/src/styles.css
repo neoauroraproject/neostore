@@ -82,3 +82,72 @@ svg {
 .ns-fade-up {
   animation: ns-fade-up var(--ns-duration-slow) var(--ns-ease) both;
 }
+
+@keyframes ns-reveal {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.ns-reveal {
+  animation: ns-reveal 0.55s var(--ns-ease) both;
+}
+
+.ns-search-expand {
+  transition: width 0.28s var(--ns-ease), box-shadow 0.28s var(--ns-ease);
+  width: 44px;
+  overflow: hidden;
+}
+
+.ns-search-expand.is-open {
+  width: min(420px, 70vw);
+  box-shadow: var(--ns-shadow-md);
+}
+
+.ns-theme-crypto-dark {
+  --ns-surface: #0b1220;
+  --ns-surface-elevated: #121a2b;
+  --ns-surface-sunken: #080e18;
+  --ns-ink: #e8eef8;
+  --ns-muted: #93a4bd;
+  --ns-faint: #64748b;
+  --ns-border: rgba(148, 163, 184, 0.18);
+  --ns-accent: #2dd4bf;
+  --ns-accent-hover: #5eead4;
+  --ns-accent-soft: rgba(45, 212, 191, 0.16);
+  --ns-accent-ink: #99f6e4;
+  background:
+    radial-gradient(120% 80% at 10% -10%, rgba(45, 212, 191, 0.12), transparent 50%),
+    radial-gradient(90% 60% at 100% 0%, rgba(56, 189, 248, 0.1), transparent 45%),
+    var(--ns-surface);
+  color: var(--ns-ink);
+}
+
+.ns-glow-line {
+  position: relative;
+}
+
+.ns-glow-line::after {
+  content: '';
+  position: absolute;
+  inset-inline: 10%;
+  bottom: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--ns-accent), transparent);
+  opacity: 0.55;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ns-fade-up,
+  .ns-reveal,
+  .ns-search-expand {
+    animation: none !important;
+    transition: none !important;
+  }
+}
+

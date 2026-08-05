@@ -1,0 +1,25 @@
+{
+  "id": "example.hello-menu",
+  "name": "Hello Menu",
+  "version": "1.0.0",
+  "type": "widget",
+  "author": "NeoStore Examples",
+  "description": "Minimal extension that contributes an admin menu item.",
+  "neostore": ">=0.4.0",
+  "compatibility": { "minCore": "0.4.0" },
+  "permissions": ["settings"],
+  "contributes": {
+    "menus": [
+      {
+        "location": "admin.seller",
+        "label": "Hello Menu",
+        "href": "/w/:workspaceId/extensions/example.hello-menu",
+        "order": 90
+      }
+    ],
+    "settings": [
+      { "key": "greeting", "type": "string", "label": "Greeting", "default": "Hello from extension" }
+    ]
+  },
+  "main": "index.js"
+}

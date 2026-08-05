@@ -24,6 +24,7 @@ type HomepageConfig = {
   featuredMode: 'featured' | 'all' | 'manualIds';
   featuredProductIds: string[];
   showSearch: boolean;
+  topMenu: Array<{ id: string; label: string; href: string; visible: boolean }>;
 };
 
 const defaults: HomepageConfig = {
@@ -38,6 +39,10 @@ const defaults: HomepageConfig = {
   featuredMode: 'featured',
   featuredProductIds: [],
   showSearch: true,
+  topMenu: [
+    { id: 'home', label: 'Home', href: '/', visible: true },
+    { id: 'browse', label: 'Browse', href: '/c/all', visible: true },
+  ],
 };
 
 export default function HomepageDesignerPage() {
@@ -185,6 +190,62 @@ export default function HomepageDesignerPage() {
               />
               Show category chip row
             </label>
+
+            <strong>Top menu</strong>
+            {(config.topMenu || []).map((item, idx) => (
+              <div key={item.id || idx} style={{ display: 'grid', gap: 8, gridTemplateColumns: '1fr 1fr auto', alignItems: 'end' }}>
+                <label style={label}>
+                  Label
+                  <Input
+                    value={item.label}
+                    onChange={(e) => {
+                      const topMenu = [...(config.topMenu || [])];
+                      topMenu[idx] = { ...topMenu[idx], label: e.target.value };
+                      setConfig({ ...config, topMenu });
+                    }}
+                  />
+                </label>
+                <label style={label}>
+                  Href
+                  <Input
+                    value={item.href}
+                    onChange={(e) => {
+                      const topMenu = [...(config.topMenu || [])];
+                      topMenu[idx] = { ...topMenu[idx], href: e.target.value };
+                      setConfig({ ...config, topMenu });
+                    }}
+                  />
+                </label>
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', fontSize: 13, paddingBottom: 10 }}>
+                  <input
+                    type="checkbox"
+                    checked={item.visible !== false}
+                    onChange={(e) => {
+                      const topMenu = [...(config.topMenu || [])];
+                      topMenu[idx] = { ...topMenu[idx], visible: e.target.checked };
+                      setConfig({ ...config, topMenu });
+                    }}
+                  />
+                  Show
+                </label>
+              </div>
+            ))}
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              onClick={() =>
+                setConfig({
+                  ...config,
+                  topMenu: [
+                    ...(config.topMenu || []),
+                    { id: `m-${Date.now()}`, label: 'New link', href: '/', visible: true },
+                  ],
+                })
+              }
+            >
+              Add menu item
+            </Button>
 
             <label style={label}>
               Featured products mode

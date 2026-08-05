@@ -27,6 +27,34 @@ export type Permission =
   | 'webhook'
   | 'users';
 
+export type MenuLocation = 'admin.platform' | 'admin.seller' | 'storefront.account';
+
+export interface ExtensionMenuContribution {
+  location: MenuLocation;
+  label: string;
+  href: string;
+  icon?: string;
+  order?: number;
+}
+
+export interface ExtensionSettingField {
+  key: string;
+  type: 'string' | 'number' | 'boolean' | 'secret' | 'json';
+  label?: string;
+  required?: boolean;
+}
+
+export interface ExtensionContributes {
+  menus?: ExtensionMenuContribution[];
+  settings?: ExtensionSettingField[];
+  webhooks?: string[];
+  theme?: {
+    sections?: string[];
+    tokens?: Record<string, string>;
+    layouts?: string[];
+  };
+}
+
 export interface ExtensionManifest {
   id: string;
   name: string;
@@ -40,6 +68,9 @@ export interface ExtensionManifest {
   homepage?: string;
   repository?: string;
   entry?: string;
+  main?: string;
+  contributes?: ExtensionContributes;
+  official?: boolean;
 }
 
 export interface ExtensionContext {
@@ -47,6 +78,7 @@ export interface ExtensionContext {
   api: OfficialApiSurface;
   log: (level: 'info' | 'warn' | 'error', msg: string, meta?: Record<string, unknown>) => void;
   hasPermission: (p: Permission) => boolean;
+  settings: Record<string, unknown>;
 }
 
 export interface OfficialApiSurface {
@@ -57,7 +89,13 @@ export interface OfficialApiSurface {
     set(workspaceId: string, key: string, value: unknown): Promise<void>;
   };
   notifications: {
-    notify(input: { workspaceId: string; customerId?: string; title: string; message: string; type: string }): Promise<void>;
+    notify(input: {
+      workspaceId: string;
+      customerId?: string;
+      title: string;
+      message: string;
+      type: string;
+    }): Promise<void>;
   };
   storage: { put(path: string, data: Buffer | string): Promise<string> };
   logger: { info(msg: string, meta?: Record<string, unknown>): void };
@@ -86,6 +124,12 @@ export interface ProductTypeExtension {
   validateFields?(fields: Record<string, unknown>): { ok: boolean; errors?: string[] };
 }
 
+export interface ThemeExtension {
+  type: 'theme';
+  id: string;
+  defaultSections?: Record<string, unknown>;
+}
+
 export interface AccessInfo {
   accessKey?: string;
   accessUrl?: string;
@@ -111,6 +155,7 @@ export type AnyExtension =
   | PaymentGatewayExtension
   | DeliveryProviderExtension
   | ProductTypeExtension
+  | ThemeExtension
   | { type: ExtensionType; id: string; [k: string]: unknown };
 
 export type CoreEventName =
@@ -121,17 +166,23 @@ export type CoreEventName =
   | 'ProductPurchased'
   | 'ProductUpdated'
   | 'WalletDeposited'
-  | 'TicketOpened'
-  | 'SettlementPaid';
+  | 'WalletRefunded'
+  | 'ExtensionInstalled'
+  | 'ExtensionEnabled'
+  | 'ExtensionDisabled'
+  | 'ExtensionUninstalled';
 
-export type HookName =
+export type CoreHookName =
+  | 'beforeLogin'
+  | 'afterLogin'
   | 'beforeOrderCreate'
   | 'afterOrderCreate'
   | 'beforePayment'
   | 'afterPayment'
-  | 'beforeWalletDeposit'
-  | 'afterWalletDeposit'
-  | 'beforeLogin'
-  | 'afterLogin'
   | 'beforeFulfillment'
-  | 'afterFulfillment';
+  | 'afterFulfillment'
+  | 'beforeWalletDeposit'
+  | 'afterWalletDeposit';
+
+/** Backwards-compatible name used by the hook dispatcher. */
+export type HookName = CoreHookName;

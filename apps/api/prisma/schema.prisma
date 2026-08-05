@@ -62,6 +62,7 @@ model User {
   name         String?
   role         Role     @default(customer)
   telegramId   String?  @unique
+  googleSub    String?  @unique
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -129,6 +130,9 @@ model StoreProfile {
   telegramAdminChatId      String?
   homepageConfig           Json     @default("{}")
   branding                 Json     @default("{}")
+  themeId                  String?  @default("neostore.theme.marketplace")
+  themeConfig              Json     @default("{}")
+  deliverySchedule         Json     @default("{}")
   manualDeliverSlaMinutes  Int      @default(60)
   createdAt                DateTime @default(now())
   updatedAt                DateTime @updatedAt
@@ -188,6 +192,8 @@ model Product {
   stockCount    Int          @default(0)
   imageUrl      String?
   deliverWithinMinutes Int?
+  priceBase     String       @default("USD")
+  acceptedAssets Json        @default("[]")
   typeFields    Json         @default("{}")
   createdAt     DateTime     @default(now())
   updatedAt     DateTime     @updatedAt
@@ -203,6 +209,8 @@ model Customer {
   token              String    @unique
   name               String?
   email              String?
+  passwordHash       String?
+  googleSub          String?
   telegram           String?
   telegramUserId     String?
   telegramUsername   String?
@@ -218,8 +226,11 @@ model Customer {
   orders             Order[]
   notifications      CustomerNotification[]
   entitlements       Entitlement[]
+  tickets            Ticket[]
 
   @@unique([workspaceId, telegramUserId])
+  @@unique([workspaceId, email])
+  @@unique([workspaceId, googleSub])
 }
 
 model CustomerSession {
@@ -405,4 +416,52 @@ model WorkspaceExtension {
 model PlatformSettings {
   id    String @id @default("default")
   value Json   @default("{}")
+}
+
+model ExtensionAuditLog {
+  id          String   @id @default(uuid())
+  action      String
+  extensionId String
+  actor       String
+  meta        Json     @default("{}")
+  createdAt   DateTime @default(now())
+}
+
+model Ticket {
+  id          String   @id @default(uuid())
+  workspaceId String?
+  customerId  String?
+  userId      String?
+  orderId     String?
+  kind        String   @default("support")
+  subject     String
+  status      String   @default("open")
+  priority    String   @default("normal")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  customer    Customer? @relation(fields: [customerId], references: [id])
+  messages    TicketMessage[]
+}
+
+model TicketMessage {
+  id         String   @id @default(uuid())
+  ticketId   String
+  authorKind String
+  authorId   String?
+  body       String
+  createdAt  DateTime @default(now())
+  ticket     Ticket   @relation(fields: [ticketId], references: [id], onDelete: Cascade)
+}
+
+model SellerTelegramLink {
+  id          String   @id @default(uuid())
+  workspaceId String
+  userId      String?
+  chatId      String
+  linkToken   String   @unique
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([workspaceId, chatId])
 }

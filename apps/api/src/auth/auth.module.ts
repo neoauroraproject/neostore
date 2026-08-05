@@ -147,6 +147,35 @@ export class AuthService {
     return { token, user: this.publicUser(user) };
   }
 
+  async loginOrRegisterGoogle(input: { googleSub: string; email: string; name?: string }) {
+    const email = input.email.trim().toLowerCase();
+    let user = await this.prisma.user.findFirst({
+      where: { OR: [{ googleSub: input.googleSub }, { email }] },
+    });
+    if (!user) {
+      user = await this.prisma.user.create({
+        data: {
+          email,
+          googleSub: input.googleSub,
+          name: input.name || email.split('@')[0],
+          role: Role.workspace_owner,
+        },
+      });
+      await this.events.emit('UserCreated', { userId: user.id, email });
+    } else if (!user.googleSub) {
+      user = await this.prisma.user.update({
+        where: { id: user.id },
+        data: { googleSub: input.googleSub },
+      });
+    }
+    const token = await this.sign(user.id, user.role);
+    const memberships = await this.prisma.workspaceMember.findMany({
+      where: { userId: user.id },
+      include: { workspace: { include: { store: true } } },
+    });
+    return { token, user: this.publicUser(user), workspaces: memberships.map((m) => m.workspace) };
+  }
+
   async me(userId: string) {
     const user = await this.prisma.user.findUniqueOrThrow({ where: { id: userId } });
     const memberships = await this.prisma.workspaceMember.findMany({
