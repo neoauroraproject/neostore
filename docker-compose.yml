@@ -36,6 +36,8 @@ services:
       DATABASE_URL: postgresql://${POSTGRES_USER:-neostore}:${POSTGRES_PASSWORD:-neostore}@postgres:5432/${POSTGRES_DB:-neostore}
       REDIS_URL: redis://redis:6379
       PORT: "4100"
+      NEOSTORE_VERSION: ${NEOSTORE_VERSION:-latest}
+      GITHUB_REPO: ${GITHUB_REPO:-neoauroraproject/neostore}
     volumes:
       - neostore_storage:/data/storage
     depends_on:
@@ -47,6 +49,25 @@ services:
       - neostore
     expose:
       - "4100"
+
+  # Watches /data/storage/update-request.json and pulls/recreates stack (incl. DB migrate on API boot).
+  updater:
+    image: docker:27-cli
+    restart: unless-stopped
+    working_dir: /opt/neostore
+    environment:
+      INSTALL_DIR: /opt/neostore
+      REQUEST_FILE: /data/storage/update-request.json
+      STATUS_FILE: /data/storage/update-status.json
+      COMPOSE_FILE: docker-compose.yml
+      POLL_SECONDS: "12"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - .:/opt/neostore
+      - neostore_storage:/data/storage
+    entrypoint: ["/bin/sh", "/opt/neostore/install/updater-loop.sh"]
+    networks:
+      - neostore
 
   storefront:
     image: ${NEOSTORE_IMAGE_STOREFRONT:-ghcr.io/neoauroraproject/neostore-storefront}:${NEOSTORE_VERSION:-latest}

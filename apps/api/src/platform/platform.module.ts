@@ -13,6 +13,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { PrismaService } from '../prisma/prisma.service';
 import { MailerModule, MailerService, type SmtpConfig } from '../mailer/mailer.module';
+import { UpdatesService } from './updates.service';
 
 export type PlatformValue = {
   cryptoAssets?: Array<{
@@ -31,6 +32,11 @@ export type PlatformValue = {
     enabledForSellers?: boolean;
   };
   smtp?: SmtpConfig;
+  lastUpdateCheck?: {
+    at?: string;
+    latestTag?: string;
+    current?: string;
+  };
 };
 
 @Injectable()
@@ -66,7 +72,6 @@ export class PlatformService {
       smtp: { ...(current.smtp || {}), ...(patch.smtp || {}) },
       googleOAuth: { ...(current.googleOAuth || {}), ...(patch.googleOAuth || {}) },
     };
-    // never echo empty secret overwriting with blank unless explicitly sent as null clear
     if (patch.smtp && patch.smtp.password === '') {
       next.smtp!.password = current.smtp?.password;
     }
@@ -106,6 +111,7 @@ export class PlatformController {
   constructor(
     private readonly platform: PlatformService,
     private readonly mailer: MailerService,
+    private readonly updates: UpdatesService,
   ) {}
 
   @Get('settings')
@@ -124,12 +130,30 @@ export class PlatformController {
     await this.platform.requireSuper(req.user.id);
     return this.mailer.sendTest(body.to);
   }
+
+  @Get('updates')
+  async updatesStatus(@Req() req: { user: { id: string } }) {
+    await this.platform.requireSuper(req.user.id);
+    return this.updates.status();
+  }
+
+  @Post('updates/check')
+  async updatesCheck(@Req() req: { user: { id: string } }) {
+    await this.platform.requireSuper(req.user.id);
+    return this.updates.checkGithub();
+  }
+
+  @Post('updates/apply')
+  async updatesApply(@Req() req: { user: { id: string } }, @Body() body: { version?: string }) {
+    await this.platform.requireSuper(req.user.id);
+    return this.updates.queueApply(body?.version);
+  }
 }
 
 @Module({
   imports: [MailerModule],
-  providers: [PlatformService],
+  providers: [PlatformService, UpdatesService],
   controllers: [PlatformController],
-  exports: [PlatformService],
+  exports: [PlatformService, UpdatesService],
 })
 export class PlatformModule {}

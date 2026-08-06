@@ -355,6 +355,30 @@ do_update() {
   ensure_git
   cd "$INSTALL_DIR"
 
+  local target_version="${1:-}"
+  if [[ -z "$target_version" ]]; then
+    # Discover latest GitHub release when possible; fall back to .env / latest
+    local latest_tag=""
+    latest_tag="$(curl -fsSL -H 'Accept: application/vnd.github+json' \
+      "https://api.github.com/repos/neoauroraproject/neostore/releases/latest" 2>/dev/null \
+      | sed -n 's/.*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1 || true)"
+    if [[ -n "$latest_tag" ]]; then
+      prompt "Version to deploy (GitHub latest = ${latest_tag})" "$latest_tag"
+      target_version="$REPLY"
+    else
+      if [[ -f .env ]]; then
+        # shellcheck disable=SC1091
+        set -a; source .env; set +a
+      fi
+      prompt "Version to deploy" "${NEOSTORE_VERSION:-latest}"
+      target_version="$REPLY"
+    fi
+  fi
+  target_version="${target_version:-latest}"
+  if [[ "$target_version" != "latest" && "$target_version" != v* ]]; then
+    target_version="v${target_version}"
+  fi
+
   # Keep secrets; discard local edits to tracked installer files from previous install
   local env_bak=""
   if [[ -f .env ]]; then
@@ -362,7 +386,7 @@ do_update() {
     cp -a .env "$env_bak"
   fi
 
-  log "Pulling latest code..."
+  log "Pulling latest installer/compose from git..."
   if [[ -d .git ]]; then
     git fetch --depth 1 origin "$REPO_BRANCH"
     git reset --hard "origin/$REPO_BRANCH"
@@ -377,6 +401,17 @@ do_update() {
   fi
   ensure_version_in_env
 
+  # Pin image tag for this update (entrypoint migrates DB on API boot)
+  if grep -q '^NEOSTORE_VERSION=' .env 2>/dev/null; then
+    sed -i "s|^NEOSTORE_VERSION=.*|NEOSTORE_VERSION=${target_version}|" .env
+  else
+    echo "NEOSTORE_VERSION=${target_version}" >>.env
+  fi
+  if ! grep -q '^NEOSTORE_PULL_POLICY=' .env 2>/dev/null; then
+    echo "NEOSTORE_PULL_POLICY=always" >>.env
+  fi
+  export NEOSTORE_VERSION="$target_version"
+
   # Regenerate reverse-proxy config from saved domain settings
   if [[ -f .env ]]; then
     # shellcheck disable=SC1091
@@ -386,7 +421,19 @@ do_update() {
 
   chmod +x "$INSTALL_DIR/install/"*.sh 2>/dev/null || true
   compose_pull_up
-  log "Update complete."
+
+  log "Waiting for API health after migrate/boot (tag: ${target_version})..."
+  local i=0
+  until compose exec -T api node -e "require('http').get('http://127.0.0.1:4100/api/public',r=>process.exit(r.statusCode&&r.statusCode<500?0:1)).on('error',()=>process.exit(1))" 2>/dev/null; do
+    i=$((i + 1))
+    if [[ $i -ge 90 ]]; then
+      warn "API not healthy yet — check: docker compose logs api --tail=80"
+      break
+    fi
+    sleep 2
+  done
+
+  log "Update complete → ${target_version}"
   compose ps
   if [[ -f .env ]]; then
     # shellcheck disable=SC1091
@@ -394,6 +441,7 @@ do_update() {
     echo
     echo -e "  Shop:  ${BOLD}${PUBLIC_BASE_URL:-/}/${NC}"
     echo -e "  Admin: ${BOLD}${PUBLIC_BASE_URL:-}/admin${NC}"
+    echo -e "  Tag:   ${BOLD}${NEOSTORE_VERSION}${NC}"
   fi
 }
 
@@ -542,7 +590,10 @@ fi
 cmd="${1:-}"
 case "$cmd" in
   install) do_install ;;
-  update) do_update ;;
+  update)
+    shift || true
+    do_update "$@"
+    ;;
   uninstall|remove) do_uninstall ;;
   status) do_status ;;
   restart) do_restart ;;
@@ -550,7 +601,9 @@ case "$cmd" in
   domain) do_change_domain ;;
   menu|"") main_menu ;;
   *)
-    echo "Usage: $0 [menu|install|update|uninstall|status|restart|logs|domain]"
+    echo "Usage: $0 [menu|install|update [version]|uninstall|status|restart|logs|domain]"
+    echo "  update           Interactive / latest GitHub release"
+    echo "  update v0.4.1    Pin GHCR tag and recreate stack (DB migrates on API boot)"
     exit 1
     ;;
 esac

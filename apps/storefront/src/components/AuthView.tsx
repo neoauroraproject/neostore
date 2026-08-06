@@ -12,6 +12,22 @@ function storeSlug() {
   return (process.env.NEXT_PUBLIC_STORE_SLUG || '').trim();
 }
 
+async function readJson(res: Response) {
+  const text = await res.text();
+  if (!text) {
+    throw new Error(
+      res.status === 502 || res.status === 503
+        ? 'API is down (Bad Gateway). Run server update / check API container.'
+        : `Empty response from API (HTTP ${res.status})`,
+    );
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`API returned non-JSON (HTTP ${res.status})`);
+  }
+}
+
 export function AuthView({ mode }: { mode: 'login' | 'register' }) {
   const router = useRouter();
   const params = useSearchParams();
@@ -28,8 +44,12 @@ export function AuthView({ mode }: { mode: 'login' | 'register' }) {
 
   useEffect(() => {
     fetch(`${API}/public`)
-      .then((r) => r.json())
+      .then(async (r) => {
+        if (!r.ok) return null;
+        return readJson(r).catch(() => null);
+      })
       .then((d) => {
+        if (!d) return;
         if (d?.store?.slug) setResolvedSlug(d.store.slug);
         setGoogleEnabled(Boolean(d?.store?.googleAuthEnabled));
       })
@@ -52,7 +72,7 @@ export function AuthView({ mode }: { mode: 'login' | 'register' }) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        const data = await res.json();
+        const data = await readJson(res);
         if (!res.ok) throw new Error(data?.message || 'Auth failed');
         const workspaces = (data.workspaces || (data.workspace ? [data.workspace] : [])).map((w: any) => ({
           id: w.id,
@@ -74,7 +94,12 @@ export function AuthView({ mode }: { mode: 'login' | 'register' }) {
         return;
       }
 
-      const s = slug || (await fetch(`${API}/public`).then((r) => r.json()).then((c) => c?.store?.slug));
+      let s = slug;
+      if (!s) {
+        const pub = await fetch(`${API}/public`);
+        const cat = await readJson(pub);
+        s = cat?.store?.slug;
+      }
       if (!s) throw new Error('Store not available');
       await customerAuth(s);
     } catch (err: any) {
@@ -91,7 +116,7 @@ export function AuthView({ mode }: { mode: 'login' | 'register' }) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password, name: name || undefined }),
     });
-    const data = await res.json();
+    const data = await readJson(res);
     if (!res.ok) throw new Error(typeof data?.message === 'string' ? data.message : 'Auth failed');
     setCustomerSession(data.sessionToken);
     router.push('/portal');
@@ -105,7 +130,7 @@ export function AuthView({ mode }: { mode: 'login' | 'register' }) {
         ...(role === 'customer' && slug ? { slug } : {}),
       });
       const res = await fetch(`${API}/oauth/google/start?${qs}`);
-      const data = await res.json();
+      const data = await readJson(res);
       if (!res.ok) throw new Error(data?.message || 'Google OAuth unavailable');
       window.location.href = data.url;
     } catch (e: any) {

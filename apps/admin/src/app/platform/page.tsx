@@ -30,6 +30,15 @@ export default function PlatformHome() {
           </Link>
         </Card>
         <Card>
+          <strong>System updates</strong>
+          <p style={{ margin: '8px 0 12px', color: 'var(--ns-muted)', fontSize: 13 }}>
+            Check GitHub releases and deploy GHCR images (DB migrates on API boot).
+          </p>
+          <Link href="/platform/updates">
+            <Button size="sm">Check updates</Button>
+          </Link>
+        </Card>
+        <Card>
           <strong>Platform settings</strong>
           <p style={{ margin: '8px 0 12px', color: 'var(--ns-muted)', fontSize: 13 }}>SMTP, Google OAuth, crypto assets.</p>
           <Link href="/platform/settings">
